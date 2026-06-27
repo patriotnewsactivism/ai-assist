@@ -31,7 +31,14 @@ async function runAgent(
 ): Promise<AgentTurn> {
   const { provider, modelId } = config.agentModels[role];
   const { name, emoji } = AGENT_META[role];
-  const systemPrompt = getSystemPrompt(role, routing.mode, routing.extracted_goal, routing.suggested_domain);
+  const systemPrompt = getSystemPrompt(
+    role,
+    routing.mode,
+    routing.extracted_goal,
+    routing.suggested_domain,
+    config.customContext,
+    config.expertDomain
+  );
 
   emit({ type: "agent_thinking", data: { role, name, emoji, round } });
 
@@ -216,7 +223,8 @@ export async function runRoundtable(
     emit({ type: "round_complete", data: roundResult });
     console.log(`Round ${round} complete — score: ${verdict.score}, approved: ${verdict.approved}`);
 
-    if (verdict.approved || verdict.score >= 88) {
+    const threshold = config.qualityThreshold ?? 88;
+    if (verdict.approved || verdict.score >= threshold) {
       break;
     }
   }

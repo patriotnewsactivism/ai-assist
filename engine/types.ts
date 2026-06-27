@@ -52,6 +52,9 @@ export interface ThinkTankConfig {
   input: string;
   maxRounds: number;
   agentModels: Record<AgentRole, { provider: Provider; modelId: string }>;
+  customContext?: string;
+  qualityThreshold?: number;
+  expertDomain?: string;
 }
 
 export type SSEEventPayload =

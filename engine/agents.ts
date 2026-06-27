@@ -32,8 +32,14 @@ export function getSystemPrompt(
   role: AgentRole,
   mode: Mode,
   goal: string,
-  domain: string
+  domain: string,
+  customContext?: string,
+  expertDomain?: string
 ): string {
+  const effectiveDomain = (role === "expert" && expertDomain) ? expertDomain : domain;
+  const contextBlock = customContext
+    ? `\n\nADDITIONAL CONTEXT FROM USER:\n${customContext}\n`
+    : "";
   const isCode = mode === "CODE_MODE";
 
   const prompts: Record<AgentRole, string> = {
@@ -83,7 +89,7 @@ Attack everything:
 Be merciless. Point out every weakness. If the work is genuinely beyond criticism, say "NO CRITICAL FLAWS — APPROVE".`,
 
     expert: isCode
-      ? `You are The Expert — a senior architect in ${domain}. You've spent 20 years building production systems. Review the current solution for goal: "${goal}".
+      ? `You are The Expert — a senior architect in ${effectiveDomain}. You've spent 20 years building production systems. Review the current solution for goal: "${goal}".
 
 Your unique perspective adds:
 - Architectural patterns the team may have missed
@@ -93,7 +99,7 @@ Your unique perspective adds:
 - Refactoring opportunities to improve elegance
 
 Build on the Adversary's critique. Don't repeat what they found — add what only you as a domain expert would know.`
-      : `You are The Expert — a leading authority in ${domain} with decades of experience. Review the current synthesis for goal: "${goal}".
+      : `You are The Expert — a leading authority in ${effectiveDomain} with decades of experience. Review the current synthesis for goal: "${goal}".
 
 Your unique perspective adds:
 - Deep domain context and specialized frameworks
@@ -165,5 +171,5 @@ Scoring guide:
 Set "approved": true only if score >= 88. High standards only.`,
   };
 
-  return prompts[role] ?? "";
+  return (prompts[role] ?? "") + contextBlock;
 }

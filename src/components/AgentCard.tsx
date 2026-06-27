@@ -4,36 +4,38 @@ import { ROLE_COLORS } from "../types";
 
 interface Props {
   turn: AgentTurn;
-  isThinking?: boolean;
 }
 
-export default function AgentCard({ turn, isThinking = false }: Props) {
-  const [showSources, setShowSources] = useState(false);
+export default function AgentCard({ turn }: Props) {
+  const [showSources, setShowSources]     = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
   const color = ROLE_COLORS[turn.role];
 
   return (
     <div className="agent-card" style={{ borderLeftColor: color }}>
-      <div className="agent-card-header">
-        <div className="agent-identity">
-          <span className="agent-card-emoji">{turn.emoji}</span>
+      <div className="ac-header">
+        <div className="ac-identity">
+          <div className="ac-avatar" style={{ borderColor: color, background: `${color}18` }}>
+            {turn.emoji}
+          </div>
           <div>
-            <span className="agent-card-name" style={{ color }}>{turn.name}</span>
-            <span className="agent-card-model">{turn.provider} / {turn.modelId}</span>
+            <span className="ac-name" style={{ color }}>{turn.name}</span>
+            <span className="ac-model">{turn.provider} / {turn.modelId} · Round {turn.round}</span>
           </div>
         </div>
-        <div className="agent-card-badges">
+
+        <div className="ac-badges">
           {turn.searchResults && turn.searchResults.length > 0 && (
             <button
-              className="badge badge-blue"
+              className="ac-badge ac-badge-cyan"
               onClick={() => setShowSources(!showSources)}
             >
-              🔗 {turn.searchResults.length} sources
+              🔗 {turn.searchResults.length} source{turn.searchResults.length !== 1 ? "s" : ""}
             </button>
           )}
           {turn.reasoning && (
             <button
-              className="badge badge-purple"
+              className="ac-badge ac-badge-purple"
               onClick={() => setShowReasoning(!showReasoning)}
             >
               🧠 reasoning
@@ -42,40 +44,27 @@ export default function AgentCard({ turn, isThinking = false }: Props) {
         </div>
       </div>
 
-      {isThinking && (
-        <div className="thinking-indicator">
-          <span className="dot-pulse"></span>
-          <span className="dot-pulse"></span>
-          <span className="dot-pulse"></span>
-          <span className="thinking-label">thinking...</span>
+      {showReasoning && turn.reasoning && (
+        <div style={{ marginBottom: 10 }}>
+          <div className="ac-section-label">Chain of Thought</div>
+          <div className="ac-reasoning">{turn.reasoning}</div>
         </div>
       )}
 
-      {!isThinking && (
-        <>
-          {showReasoning && turn.reasoning && (
-            <div className="reasoning-block">
-              <div className="block-label">Chain of Thought</div>
-              <pre className="output-text reasoning-text">{turn.reasoning}</pre>
-            </div>
-          )}
+      <pre className="ac-output">{turn.output}</pre>
 
-          <pre className="output-text">{turn.output}</pre>
-
-          {showSources && turn.searchResults && (
-            <div className="sources-list">
-              <div className="block-label">Sources</div>
-              {turn.searchResults.map((s, i) => (
-                <div key={i} className="source-item">
-                  <a href={s.url} target="_blank" rel="noreferrer" className="source-title">
-                    {s.title || s.url}
-                  </a>
-                  <p className="source-snippet">{s.content.slice(0, 200)}…</p>
-                </div>
-              ))}
+      {showSources && turn.searchResults && turn.searchResults.length > 0 && (
+        <div className="ac-sources">
+          <div className="ac-section-label" style={{ marginTop: 10 }}>Web Sources</div>
+          {turn.searchResults.map((s, i) => (
+            <div key={i} className="source-item">
+              <a href={s.url} target="_blank" rel="noreferrer" className="source-title">
+                {s.title || s.url}
+              </a>
+              <p className="source-snippet">{s.content.slice(0, 220)}…</p>
             </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
     </div>
   );
