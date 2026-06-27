@@ -43,7 +43,7 @@ export async function callModel(
     const response = await client.messages.create({
       model: modelId,
       max_tokens: 8192,
-      system: systemMsg || undefined,
+      ...(systemMsg ? { system: systemMsg } : {}),
       messages: chatMessages,
     });
 

@@ -134,9 +134,9 @@ Output ONLY the JSON verdict.`;
     provider,
     modelId,
     output: content,
-    reasoning,
-    searchResults: agentSearchResults.length > 0 ? agentSearchResults : undefined,
     round,
+    ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(agentSearchResults.length > 0 ? { searchResults: agentSearchResults } : {}),
   };
 
   emit({ type: "agent_complete", data: turn });
