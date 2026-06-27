@@ -40,8 +40,20 @@ async function routeInput(userInput: string): Promise<RouterOutput> {
   return JSON.parse(response.choices[0].message.content || "{}");
 }
 
+interface LoopIteration {
+  iteration: number;
+  auditorFeedback: string;
+  creatorOutput: string;
+  isPerfect: boolean;
+}
+
+interface LoopProgress {
+  onIteration?: (data: LoopIteration) => void;
+  onComplete?: (finalOutput: string) => void;
+}
+
 // STEP 2: The Adversarial Loop Execution
-async function runAdversarialLoop(routing: RouterOutput, originalInput: string, maxIterations: number = 4) {
+async function runAdversarialLoop(routing: RouterOutput, originalInput: string, maxIterations: number = 4, progress?: LoopProgress) {
   console.log(`\n[Router] Selected Mode: ${routing.mode} (Confidence: ${routing.confidence_score}%)`);
   console.log(`[Target Goal]: ${routing.extracted_goal}\n`);
 
@@ -68,7 +80,7 @@ async function runAdversarialLoop(routing: RouterOutput, originalInput: string, 
 
     // 1. Auditor reviews the last output
     conversationHistoryForAuditor.push({ role: "user", content: `Review this latest iteration:\n\n${lastCreatorOutput}` });
-    
+
     console.log("🤖 [Auditor] Reviewing...");
     const auditorResponse = await openai.chat.completions.create({
       model: "deepseek-chat",
@@ -79,8 +91,15 @@ async function runAdversarialLoop(routing: RouterOutput, originalInput: string, 
     console.log(`🤖 [Auditor Sent Feedback]:\n${auditFeedback}\n`);
 
     // Check for termination criteria
-    if (auditFeedback.trim().toUpperCase().includes("PERFECT")) {
+    const isPerfect = auditFeedback.trim().toUpperCase().includes("PERFECT");
+    if (isPerfect) {
       console.log("✅ Success! The Auditor has deemed the payload perfect.");
+      progress?.onIteration?.({
+        iteration: currentTurn,
+        auditorFeedback: auditFeedback,
+        creatorOutput: lastCreatorOutput,
+        isPerfect: true,
+      });
       break;
     }
 
@@ -99,21 +118,38 @@ async function runAdversarialLoop(routing: RouterOutput, originalInput: string, 
 
     lastCreatorOutput = creatorResponse.choices[0].message.content || "";
     console.log(`🛠️ [Creator Sent Patched Version]:\n${lastCreatorOutput}\n`);
+
+    progress?.onIteration?.({
+      iteration: currentTurn,
+      auditorFeedback: auditFeedback,
+      creatorOutput: lastCreatorOutput,
+      isPerfect: false,
+    });
   }
 
   console.log("====================================");
   console.log("🏁 LOOP TERMINATED. FINAL PAYLOAD:");
   console.log(lastCreatorOutput);
   console.log("====================================");
+
+  progress?.onComplete?.(lastCreatorOutput);
+  return lastCreatorOutput;
 }
 
-// Main execution block
+// Export functions for server use
+export { routeInput, runAdversarialLoop };
+export type { RouterOutput, LoopIteration, LoopProgress };
+
+// Main execution block (for CLI use)
 async function main() {
   // Test code mode input
   const testInput = "Write a high-performance TypeScript script to handle heavy WebSockets connections and optimize it for a cloud server framework.";
-  
+
   const classification = await routeInput(testInput);
   await runAdversarialLoop(classification, testInput);
 }
 
-main();
+// Only run main if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

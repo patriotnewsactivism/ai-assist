@@ -4,12 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Run the engine directly with `tsx` (no compile step needed):
+**Development server** (runs both backend API and Vite frontend dev server):
 ```
-npx tsx engine.ts
+npm run dev
+```
+The server starts on `http://localhost:5000`. Vite proxies `/api` calls to the backend.
+
+**Build frontend** (compiles React + TypeScript to `dist/`):
+```
+npm run build-frontend
 ```
 
-Type-check without emitting:
+**Type-check** (no emit):
 ```
 npx tsc --noEmit
 ```
@@ -18,21 +24,28 @@ There is no test suite configured.
 
 ## Environment Setup
 
-Copy `.env` and populate `DEEPSEEK_API_KEY`. The engine will exit with an error if the key is missing or empty.
+Copy `.env` and populate `DEEPSEEK_API_KEY`. The server will exit with an error if the key is missing or empty.
 
 ## Architecture
 
-This project is a single-file adversarial AI loop (`engine.ts`) that uses the OpenAI SDK pointed at the DeepSeek API (`baseURL: "https://api.deepseek.com/v1"`, model `deepseek-chat`).
+**Backend**: `engine.ts` (adversarial AI loop) + `server.ts` (Express HTTP API).
 
-The execution flow has three stages:
+`engine.ts` exports two functions:
+- `routeInput(userInput)` — sends input to DeepSeek, returns JSON classification: `{mode, confidence_score, extracted_goal}`
+- `runAdversarialLoop(routing, input, maxIterations, progress?)` — runs up to `maxIterations` rounds between two LLM personas, calling progress callbacks on each iteration.
 
-1. **Router** (`routeInput`) — sends the user's input to DeepSeek and gets back a JSON classification: one of `RESEARCH_MODE`, `DATA_MODE`, or `CODE_MODE`, plus a `confidence_score` and `extracted_goal`.
+The adversarial loop uses two stateful personas:
+- **Creator** (The Architect for `CODE_MODE`, The Harvester for others) — produces/refines output.
+- **Auditor** (The Compiler for `CODE_MODE`, The Validator for others) — critiques and provides feedback. Terminates when response contains "PERFECT".
 
-2. **Adversarial loop** (`runAdversarialLoop`) — runs up to `maxIterations` (default 4) rounds between two LLM personas:
-   - **Creator** (The Architect / The Harvester) — produces or patches the output toward the extracted goal.
-   - **Auditor** (The Compiler / The Validator) — critiques the creator's output. Termination condition: auditor response contains the word `PERFECT`.
-   - `CODE_MODE` uses code-focused personas; all other modes use data/research personas.
+The Auditor maintains conversation history across iterations; the Creator is stateless (fresh context each turn).
 
-3. **Main** — hard-codes a test input string, runs the router, then runs the loop. To change the task, edit the `testInput` variable in `main()`.
+**Frontend**: React + Vite (`src/`) with three main components:
+- `DebateInput` — form to enter task and max iterations
+- `DebateProgress` — displays router classification and live iteration panels (Creator vs. Auditor side-by-side)
+- `DebateResult` — final output viewer with tab for full debate history
 
-The auditor maintains a running conversation history across iterations; the creator is stateless (fresh context each round).
+`server.ts` exposes:
+- `POST /api/debate` — start a debate session, returns session ID + full results once complete
+- `GET /api/debate/:sessionId` — poll session progress (for future streaming updates)
+- Static files served from `dist/` (Vite build output)
