@@ -1,21 +1,14 @@
 {
   "name": "ai-assist",
   "version": "1.0.0",
-  "description": "AI Think Tank — multi-model adversarial debate engine",
-  "main": "server.ts",
+  "description": "AI Think Tank",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
-    "start": "npx tsx server.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "sh start.sh"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "module",
-  "engines": {
-    "node": ">=18"
-  },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
     "@tavily/core": "^0.7.6",
