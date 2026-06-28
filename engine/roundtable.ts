@@ -1,6 +1,6 @@
 import { callModel } from "./providers.js";
 import { webSearch, buildSearchQueries } from "./search.js";
-import { AGENT_META, getSystemPrompt } from "./agents.js";
+import { AGENT_META, getSystemPrompt, buildMemoryBlock, extractMemory } from "./agents.js";
 import { parseFilesFromOutput } from "./fileparser.js";
 import { runSandbox, cleanupSandbox } from "./sandbox.js";
 import type {
@@ -8,13 +8,16 @@ import type {
   AgentTurn,
   EmitFn,
   JudgeVerdict,
+  RoundMemory,
   RoundResult,
   RouterOutput,
   SandboxRunResult,
   ThinkTankConfig,
 } from "./types.js";
 
-const ROLES_IN_ORDER: AgentRole[] = ["researcher", "adversary", "expert", "synthesizer", "judge"];
+// Base role order — steelman is injected between researcher and adversary when enabled
+const BASE_ROLES: AgentRole[] = ["researcher", "adversary", "expert", "synthesizer", "judge"];
+const ROLES_WITH_STEELMAN: AgentRole[] = ["researcher", "steelman", "adversary", "expert", "synthesizer", "judge"];
 
 async function runAgent(
   role: AgentRole,
@@ -25,10 +28,12 @@ async function runAgent(
     previousSynthesis: string;
     previousWeaknesses: string[];
     researchOutput: string;
+    steelmanOutput: string;
     adversaryOutput: string;
     expertOutput: string;
     searchResults: import("./types.js").SearchResult[];
     scores: number[];
+    roundMemories: RoundMemory[];
     extraJudgeContext?: string;
   },
   emit: EmitFn
@@ -44,6 +49,9 @@ async function runAgent(
     config.expertDomain
   );
 
+  // Build accumulated memory block for this agent
+  const memoryBlock = buildMemoryBlock(context.roundMemories);
+
   emit({ type: "agent_thinking", data: { role, name, emoji, round } });
 
   let userContent = "";
@@ -52,12 +60,10 @@ async function runAgent(
   if (role === "researcher") {
     const queries = buildSearchQueries(routing.extracted_goal, routing.mode, context.previousWeaknesses);
     const allResults: import("./types.js").SearchResult[] = [];
-
     for (const query of queries) {
       const results = await webSearch(query, 4);
       allResults.push(...results);
     }
-
     agentSearchResults = allResults;
 
     const searchContext = allResults.length > 0
@@ -67,17 +73,34 @@ async function runAgent(
       : "\n\n[No web search results available — use your training knowledge]";
 
     userContent = `GOAL: ${routing.extracted_goal}
+ROUTER ANALYSIS: ${routing.reasoning}
 
 CURRENT BEST OUTPUT (from previous round):
 ${context.previousSynthesis || "[None yet — this is round 1]"}
 
 PREVIOUS JUDGE WEAKNESSES TO ADDRESS:
 ${context.previousWeaknesses.length > 0 ? context.previousWeaknesses.join("\n") : "[None]"}
-${searchContext}
+${searchContext}${memoryBlock}
 
 Provide your research findings.`;
 
+  } else if (role === "steelman") {
+    userContent = `GOAL: ${routing.extracted_goal}
+
+CURRENT OUTPUT TO DEFEND:
+${context.previousSynthesis || "[Round 1 — build the strongest case from first principles]"}
+
+RESEARCHER FINDINGS (use this evidence to support your defense):
+${context.researchOutput}
+${memoryBlock}
+
+Construct the strongest possible case FOR this approach. Make the Adversary earn every point.`;
+
   } else if (role === "adversary") {
+    const steelmanSection = context.steelmanOutput
+      ? `\nSTEELMAN DEFENSE (you must dismantle this):\n${context.steelmanOutput}`
+      : "";
+
     userContent = `GOAL: ${routing.extracted_goal}
 
 CURRENT OUTPUT TO ATTACK:
@@ -85,10 +108,16 @@ ${context.previousSynthesis || "[Round 1 — no prior synthesis yet]"}
 
 RESEARCHER FINDINGS:
 ${context.researchOutput}
+${steelmanSection}
+${memoryBlock}
 
-Provide your critique.`;
+Provide your critique. If Steelman is present, specifically refute their strongest points.`;
 
   } else if (role === "expert") {
+    const steelmanSection = context.steelmanOutput
+      ? `\nSTEELMAN DEFENSE:\n${context.steelmanOutput.slice(0, 600)}...`
+      : "";
+
     userContent = `GOAL: ${routing.extracted_goal}
 
 CURRENT OUTPUT:
@@ -96,13 +125,18 @@ ${context.previousSynthesis || "[Round 1 — no prior synthesis yet]"}
 
 RESEARCHER FINDINGS:
 ${context.researchOutput}
-
+${steelmanSection}
 ADVERSARY CRITIQUE:
 ${context.adversaryOutput}
+${memoryBlock}
 
-Provide your expert analysis.`;
+Provide your expert analysis. Adjudicate where Steelman and Adversary disagree.`;
 
   } else if (role === "synthesizer") {
+    const steelmanSection = context.steelmanOutput
+      ? `\nSTEELMAN (genuine strengths to preserve):\n${context.steelmanOutput}`
+      : "";
+
     userContent = `GOAL: ${routing.extracted_goal}
 
 PREVIOUS BEST OUTPUT:
@@ -110,12 +144,13 @@ ${context.previousSynthesis || "[None — this is round 1, start from scratch]"}
 
 RESEARCHER FINDINGS:
 ${context.researchOutput}
-
+${steelmanSection}
 ADVERSARY CRITIQUE (all must be addressed):
 ${context.adversaryOutput}
 
 EXPERT ANALYSIS (all must be integrated):
 ${context.expertOutput}
+${memoryBlock}
 
 Produce the complete, refined output now.`;
 
@@ -126,6 +161,7 @@ Produce the complete, refined output now.`;
 
     userContent = `GOAL: ${routing.extracted_goal}
 ${scoreHistory}${context.extraJudgeContext ?? ""}
+${memoryBlock}
 
 OUTPUT TO EVALUATE:
 ${context.previousSynthesis}
@@ -138,6 +174,9 @@ Output ONLY the JSON verdict.`;
     { role: "user", content: userContent },
   ]);
 
+  // Extract memory from this agent's output for future rounds
+  const memory = extractMemory(role, round, content);
+
   const turn: AgentTurn = {
     role,
     name,
@@ -146,6 +185,7 @@ Output ONLY the JSON verdict.`;
     modelId,
     output: content,
     round,
+    memory,
     ...(reasoning !== undefined ? { reasoning } : {}),
     ...(agentSearchResults.length > 0 ? { searchResults: agentSearchResults } : {}),
   };
@@ -176,33 +216,60 @@ function parseJudgeVerdict(raw: string): JudgeVerdict {
   }
 }
 
+// Build a RoundMemory snapshot from all agent turns in a round
+function buildRoundMemory(
+  round: number,
+  agents: AgentTurn[],
+  verdict: JudgeVerdict
+): RoundMemory {
+  const agentMemories = agents
+    .filter(a => a.memory)
+    .map(a => a.memory!);
+
+  // Simple consensus/contested detection: look at what adversary attacked vs what steelman defended
+  const steelmanInsights = agents.find(a => a.role === "steelman")?.memory?.keyInsights ?? [];
+  const adversaryQuestions = agents.find(a => a.role === "adversary")?.memory?.openQuestions ?? [];
+
+  return {
+    round,
+    agentMemories,
+    consensusPoints: steelmanInsights.slice(0, 3),
+    contestedPoints: adversaryQuestions.slice(0, 3),
+    judgeScore: verdict.score,
+    judgeWeaknesses: verdict.weaknesses,
+  };
+}
+
 export async function runRoundtable(
   config: ThinkTankConfig,
   routing: RouterOutput,
   emit: EmitFn
 ): Promise<string> {
   const isCode = routing.mode === "CODE_MODE";
+  const useSteelman = config.enableSteelman === true;
+  const rolesInOrder = useSteelman ? ROLES_WITH_STEELMAN : BASE_ROLES;
+
   let lastSynthesis = "";
   let lastWeaknesses: string[] = [];
   let lastSandboxSummary = "";
   const scoreHistory: number[] = [];
   const sandboxDirs: string[] = [];
+  const roundMemories: RoundMemory[] = [];  // cross-round memory accumulator
 
   for (let round = 1; round <= config.maxRounds; round++) {
-    console.log(`\n=== ROUND ${round} ===`);
+    console.log(`\n=== ROUND ${round}${useSteelman ? " [Steelman ON]" : ""} ===`);
 
     const roundAgents: AgentTurn[] = [];
     let researchOutput = "";
+    let steelmanOutput = "";
     let adversaryOutput = "";
     let expertOutput = "";
 
-    // Append previous sandbox result to weaknesses context for researcher
     const effectiveWeaknesses = lastSandboxSummary
       ? [`Build result from last round: ${lastSandboxSummary}`, ...lastWeaknesses]
       : lastWeaknesses;
 
-    for (const role of ROLES_IN_ORDER) {
-      // For the judge in CODE_MODE, append sandbox result to judge context
+    for (const role of rolesInOrder) {
       const sandboxNote = (role === "judge" && lastSandboxSummary && round > 1)
         ? `\n\nBUILD SANDBOX RESULT (this round): ${lastSandboxSummary}`
         : "";
@@ -211,22 +278,24 @@ export async function runRoundtable(
         previousSynthesis: lastSynthesis,
         previousWeaknesses: effectiveWeaknesses,
         researchOutput,
+        steelmanOutput,
         adversaryOutput,
         expertOutput,
         searchResults: [],
         scores: scoreHistory,
+        roundMemories,          // ← full cross-round memory passed to every agent
         extraJudgeContext: sandboxNote,
       }, emit);
 
       roundAgents.push(turn);
 
       if (role === "researcher") researchOutput = turn.output;
+      if (role === "steelman")  steelmanOutput = turn.output;
       if (role === "adversary") adversaryOutput = turn.output;
-      if (role === "expert") expertOutput = turn.output;
+      if (role === "expert")    expertOutput = turn.output;
       if (role === "synthesizer") {
         lastSynthesis = turn.output;
 
-        // In CODE_MODE, run the sandbox after each synthesis
         if (isCode) {
           const files = parseFilesFromOutput(lastSynthesis);
           if (files.length > 0) {
@@ -241,7 +310,6 @@ export async function runRoundtable(
               summary: sandboxResult.summary,
             };
             emit({ type: "sandbox_result", data: { round, ...sbPayload } });
-            console.log(`[Sandbox] Round ${round}: ${sandboxResult.summary.slice(0, 80)}`);
           } else {
             lastSandboxSummary = "No file blocks found in synthesizer output — cannot build.";
           }
@@ -249,28 +317,31 @@ export async function runRoundtable(
       }
     }
 
-    const judgeRaw = roundAgents.find((a) => a.role === "judge")?.output ?? "";
+    const judgeRaw = roundAgents.find(a => a.role === "judge")?.output ?? "";
     const verdict = parseJudgeVerdict(judgeRaw);
     scoreHistory.push(verdict.score);
     lastWeaknesses = verdict.weaknesses;
+
+    // Build and store this round's memory for future agents to read
+    const roundMemory = buildRoundMemory(round, roundAgents, verdict);
+    roundMemories.push(roundMemory);
 
     const roundResult: RoundResult = {
       round,
       agents: roundAgents,
       synthesis: lastSynthesis,
       verdict,
+      memory: roundMemory,
     };
 
     emit({ type: "round_complete", data: roundResult });
+    emit({ type: "memory_update", data: { round, memory: roundMemory } });
     console.log(`Round ${round} complete — score: ${verdict.score}, approved: ${verdict.approved}`);
 
     const threshold = config.qualityThreshold ?? 88;
-    if (verdict.approved || verdict.score >= threshold) {
-      break;
-    }
+    if (verdict.approved || verdict.score >= threshold) break;
   }
 
-  // Clean up sandbox directories
   for (const dir of sandboxDirs) {
     await cleanupSandbox(dir);
   }
@@ -279,29 +350,20 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT_AGENT_MODELS — each role assigned to the provider/model that best
-// fits its personality. Mix providers intentionally: different training data
-// and RLHF philosophies mean genuine disagreement, not just paraphrasing.
-//
-// Role logic:
-//   researcher  → Gemini 2.0 Flash Lite  — fast, broad web-trained retrieval
-//   adversary   → Gemini 2.5 Flash        — deep reasoning finds the real holes
-//   expert      → Anthropic Claude Sonnet — nuanced, calibrated domain depth
-//   synthesizer → Gemini 2.5 Flash        — best long-form structured output
-//   judge       → Anthropic Claude Sonnet — careful, principled scoring
-//
-// If Anthropic key is not set, expert + judge fall back to gemini-2.5-flash.
+// DEFAULT: Gemini Researcher+Adversary+Synthesizer, Claude Expert+Judge
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+  steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
   adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
   expert:      { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
   judge:       { provider: "anthropic", modelId: "claude-sonnet-4-5" },
 };
 
-// FALLBACK_AGENT_MODELS — all Gemini, used when only GEMINI_API_KEY is set
+// FALLBACK: all-Gemini when ANTHROPIC_API_KEY is not set
 export const FALLBACK_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  steelman:    { provider: "gemini", modelId: "gemini-2.5-flash" },
   adversary:   { provider: "gemini", modelId: "gemini-2.5-flash" },
   expert:      { provider: "gemini", modelId: "gemini-2.5-flash" },
   synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
