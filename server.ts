@@ -38,10 +38,13 @@ app.get("/api/config", (_req, res) => {
 
 // POST /api/debate — start a think tank session, returns sessionId immediately
 app.post("/api/debate", (req, res) => {
-  const { input, maxRounds = 3, agentModels } = req.body as {
+  const { input, maxRounds = 3, agentModels, customContext, qualityThreshold, expertDomain } = req.body as {
     input: string;
     maxRounds?: number;
     agentModels?: Record<AgentRole, { provider: Provider; modelId: string }>;
+    customContext?: string;
+    qualityThreshold?: number;
+    expertDomain?: string;
   };
 
   if (!input?.trim()) {
@@ -57,6 +60,9 @@ app.post("/api/debate", (req, res) => {
     input: input.trim(),
     maxRounds: Math.min(Math.max(1, maxRounds), 8),
     agentModels: agentModels ?? DEFAULT_AGENT_MODELS,
+    ...(customContext ? { customContext } : {}),
+    ...(qualityThreshold !== undefined ? { qualityThreshold } : {}),
+    ...(expertDomain ? { expertDomain } : {}),
   };
 
   // Run in background
