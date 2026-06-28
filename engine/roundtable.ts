@@ -169,10 +169,28 @@ ${context.previousSynthesis}
 Output ONLY the JSON verdict.`;
   }
 
-  const { content, reasoning } = await callModel(provider, modelId, [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userContent },
-  ]);
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    { role: "user"   as const, content: userContent },
+  ];
+
+  // Try primary model; on rate-limit fall back to claude-sonnet-4-5 if available and different
+  let callResult: { content: string; reasoning?: string };
+  try {
+    callResult = await callModel(provider, modelId, messages);
+  } catch (primaryErr) {
+    const status = (primaryErr as any)?.status ?? (primaryErr as any)?.statusCode;
+    const isRateLimit = status === 429 || String((primaryErr as any)?.message).includes("429");
+    const anthropicKey = (process.env["ANTHROPIC_API_KEY"] || "").trim();
+    if (isRateLimit && anthropicKey && provider !== "anthropic") {
+      console.warn(`[Agent:${role}] Primary ${provider}/${modelId} rate-limited — falling back to claude-sonnet-4-5`);
+      callResult = await callModel("anthropic", "claude-sonnet-4-5", messages);
+    } else {
+      throw primaryErr;
+    }
+  }
+
+  const { content, reasoning } = callResult;
 
   // Extract memory from this agent's output for future rounds
   const memory = extractMemory(role, round, content);
@@ -350,13 +368,13 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: Gemini for research/synthesis (fast/cheap), Claude for reasoning roles
+// DEFAULT: Claude for all reasoning/generation; Gemini only for synthesizer (long output)
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+  researcher:  { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   steelman:    { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   adversary:   { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   expert:      { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  synthesizer: { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   judge:       { provider: "anthropic", modelId: "claude-sonnet-4-5" },
 };
 
