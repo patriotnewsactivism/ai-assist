@@ -105,14 +105,12 @@ export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "
 
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
   deepseek: [
-    { modelId: "deepseek-chat",     label: "DeepSeek V3" },
-    { modelId: "deepseek-reasoner", label: "DeepSeek R1 (Reasoning)" },
+    { modelId: "deepseek-chat", label: "DeepSeek V3" },
   ],
   groq: [
-    { modelId: "llama-3.3-70b-versatile",      label: "Llama 3.3 70B (Fast)" },
-    { modelId: "llama-3.1-8b-instant",         label: "Llama 3.1 8B (Instant)" },
-    { modelId: "mixtral-8x7b-32768",           label: "Mixtral 8x7B" },
-    { modelId: "deepseek-r1-distill-llama-70b",label: "DeepSeek R1 70B (Groq)" },
+    { modelId: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (Fast)" },
+    { modelId: "llama-3.1-8b-instant",    label: "Llama 3.1 8B (Instant)" },
+    { modelId: "mixtral-8x7b-32768",      label: "Mixtral 8x7B" },
   ],
   openai: [
     { modelId: "gpt-4o",     label: "GPT-4o" },

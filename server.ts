@@ -103,7 +103,12 @@ app.post("/api/repo/push", async (req, res) => {
 });
 
 // POST /api/documents/upload — parse uploaded files and store extracted text
-app.post("/api/documents/upload", upload.array("files", 5), async (req, res) => {
+app.post("/api/documents/upload", (req, res, next) => {
+  upload.array("files", 5)(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message ?? "File upload failed" });
+    next();
+  });
+}, async (req, res) => {
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) return res.status(400).json({ error: "No files provided" });
 

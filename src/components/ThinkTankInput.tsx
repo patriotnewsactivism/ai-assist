@@ -41,14 +41,14 @@ const PACKS: Record<ModelPack, { label: string; desc: string; models: (avail: Pr
   },
   deep: {
     label: "🧠 Deep",
-    desc: "DeepSeek R1 + Groq 70B — strong reasoning",
+    desc: "Groq Llama 70B + DeepSeek — strong reasoning, reliable speed",
     models: (avail) => ({
       researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-      steelman:    { provider: "deepseek", modelId: "deepseek-reasoner" },
+      steelman:    avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
       adversary:   avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      { provider: "deepseek", modelId: "deepseek-reasoner" },
+      expert:      { provider: "deepseek", modelId: "deepseek-chat" },
       synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
-      judge:       avail.includes("groq") ? { provider: "groq", modelId: "deepseek-r1-distill-llama-70b" } : { provider: "deepseek", modelId: "deepseek-reasoner" },
+      judge:       avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
     }),
   },
   mixed: {
