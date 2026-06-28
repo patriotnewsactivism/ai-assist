@@ -40,44 +40,74 @@ function buildOpenAIClient(provider: Provider): OpenAI {
   });
 }
 
+function is429(err: unknown): boolean {
+  return (
+    (err as any)?.status === 429 ||
+    (err as any)?.statusCode === 429 ||
+    String((err as any)?.message).includes("429")
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export async function callModel(
   provider: Provider,
   modelId: string,
-  messages: Message[]
+  messages: Message[],
+  { retries = 3, baseDelayMs = 1000 }: { retries?: number; baseDelayMs?: number } = {}
 ): Promise<{ content: string; reasoning?: string }> {
-  if (provider === "anthropic") {
-    const client = new Anthropic({
-      apiKey: (process.env["ANTHROPIC_API_KEY"] || "").trim(),
-    });
+  let lastErr: unknown;
 
-    const systemMsg = messages.find((m) => m.role === "system")?.content ?? "";
-    const chatMessages = messages
-      .filter((m) => m.role !== "system")
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelayMs * 2 ** (attempt - 1); // 1s, 2s, 4s
+      console.warn(`[Provider] 429 on ${provider}/${modelId} — retrying in ${delay}ms (attempt ${attempt}/${retries})`);
+      await sleep(delay);
+    }
 
-    const response = await client.messages.create({
-      model: modelId,
-      max_tokens: getMaxTokens(modelId),
-      ...(systemMsg ? { system: systemMsg } : {}),
-      messages: chatMessages,
-    });
+    try {
+      if (provider === "anthropic") {
+        const client = new Anthropic({
+          apiKey: (process.env["ANTHROPIC_API_KEY"] || "").trim(),
+        });
 
-    const block = response.content[0];
-    return { content: block?.type === "text" ? block.text : "" };
+        const systemMsg = messages.find((m) => m.role === "system")?.content ?? "";
+        const chatMessages = messages
+          .filter((m) => m.role !== "system")
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+        const response = await client.messages.create({
+          model: modelId,
+          max_tokens: getMaxTokens(modelId),
+          ...(systemMsg ? { system: systemMsg } : {}),
+          messages: chatMessages,
+        });
+
+        const block = response.content[0];
+        return { content: block?.type === "text" ? block.text : "" };
+      }
+
+      const client = buildOpenAIClient(provider);
+      const response = await client.chat.completions.create({
+        model: modelId,
+        messages,
+        max_tokens: getMaxTokens(modelId),
+      });
+
+      const msg = response.choices[0]?.message as any;
+      return {
+        content: msg?.content ?? "",
+        reasoning: msg?.reasoning_content ?? undefined,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (!is429(err)) throw err; // non-rate-limit errors propagate immediately
+    }
   }
 
-  const client = buildOpenAIClient(provider);
-  const response = await client.chat.completions.create({
-    model: modelId,
-    messages,
-    max_tokens: getMaxTokens(modelId),
-  });
-
-  const msg = response.choices[0]?.message as any;
-  return {
-    content: msg?.content ?? "",
-    reasoning: msg?.reasoning_content ?? undefined,
-  };
+  throw lastErr;
 }
 
 export function getAvailableProviders(): Provider[] {
