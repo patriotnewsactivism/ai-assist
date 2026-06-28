@@ -1,4 +1,10 @@
 import { load } from "cheerio";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+// pdf-parse is CommonJS — must be loaded via require in an ESM project
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
 
 const MAX_CHARS = 150_000;
 
@@ -8,9 +14,6 @@ function cap(text: string): string {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod = await import("pdf-parse") as any;
-  const pdfParse = mod.default ?? mod;
   const data = await pdfParse(buffer);
   return cap(data.text);
 }
