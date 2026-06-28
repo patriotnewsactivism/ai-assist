@@ -41,6 +41,7 @@ export interface SessionConfig {
   customContext: string;
   expertDomain: string;
   agentModels: Record<AgentRole, { provider: Provider; modelId: string }>;
+  enableSteelman?: boolean;
   repoUrl?: string;
   repoToken?: string;
 }
