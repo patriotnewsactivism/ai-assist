@@ -286,7 +286,7 @@ export async function runRoundtable(
   emit: EmitFn
 ): Promise<string> {
   const isCode = routing.mode === "CODE_MODE";
-  const useSteelman = config.enableSteelman === true;
+  const useSteelman = config.enableSteelman !== false; // default ON; only OFF when explicitly false
   const rolesInOrder = useSteelman ? ROLES_WITH_STEELMAN : BASE_ROLES;
 
   let lastSynthesis = "";
@@ -390,10 +390,10 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: DeepSeek-heavy for cost; Groq for speed-critical roles; Gemini as overflow
+// DEFAULT: DeepSeek for research/analysis; Groq Llama 70B for reasoning/debate roles
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-  steelman:    { provider: "deepseek", modelId: "deepseek-chat" },
+  steelman:    { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
   adversary:   { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
   expert:      { provider: "deepseek", modelId: "deepseek-chat" },
   synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
