@@ -2,9 +2,17 @@ import { load } from "cheerio";
 import mammoth from "mammoth";
 import { createRequire } from "module";
 
-// pdf-parse v1.1.1 is CJS — load via createRequire so it works in ESM/tsx
-const _require = createRequire(import.meta.url);
-const pdfParse  = _require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+// Lazy loader — only called when a PDF is actually uploaded, never at server startup.
+// Loads lib/pdf-parse.js directly to skip index.js, which reads a test fixture
+// (./test/data/05-versions-space.pdf) that crashes the process when it doesn't exist.
+function getPdfParse(): (buf: Buffer) => Promise<{ text: string }> {
+  const req = createRequire(import.meta.url);
+  try {
+    return req("pdf-parse/lib/pdf-parse.js");
+  } catch {
+    return req("pdf-parse");
+  }
+}
 
 const MAX_CHARS = 150_000;
 
@@ -14,6 +22,7 @@ function cap(text: string): string {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<string> {
+  const pdfParse = getPdfParse();
   const data = await pdfParse(buffer);
   return cap(data.text);
 }
