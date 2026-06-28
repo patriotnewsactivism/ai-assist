@@ -79,6 +79,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
   const [repoFiles, setRepoFiles]       = useState<RepoFileInfo[] | null>(null);
   const [repoImporting, setRepoImporting] = useState(false);
   const [repoError, setRepoError]       = useState("");
+  const [enableSteelman, setSteelman]   = useState(true);   // ON by default
 
   const available = serverConfig?.availableProviders ?? ["deepseek"];
 
@@ -137,6 +138,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
       customContext,
       expertDomain,
       agentModels,
+      enableSteelman,
       ...(repoUrl.trim() ? { repoUrl: repoUrl.trim(), ...(repoToken.trim() ? { repoToken: repoToken.trim() } : {}) } : {}),
     });
   };
@@ -149,7 +151,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
       <div className="hero-section">
         <h1 className="hero-title">The AI Think Tank</h1>
         <p className="hero-sub">
-          Five specialized AI agents debate, research, and refine your task through adversarial rounds until they reach the highest quality output.
+          Six specialized AI agents research, defend, attack, and refine your task through adversarial rounds until they reach the highest quality output.
         </p>
         {agentMeta && (
           <div className="agent-row">
@@ -189,6 +191,35 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
                 {p.emoji} {p.label}
               </button>
             ))}
+          </div>
+
+          {/* Steelman toggle */}
+          <div className="steelman-toggle-row" style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0", padding: "10px 14px", borderRadius: 10, background: enableSteelman ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.03)", border: enableSteelman ? "1px solid rgba(99,102,241,0.3)" : "1px solid rgba(255,255,255,0.08)", transition: "all 0.2s" }}>
+            <button
+              type="button"
+              onClick={() => setSteelman(!enableSteelman)}
+              style={{
+                position: "relative", width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer",
+                background: enableSteelman ? "#6366f1" : "rgba(255,255,255,0.15)", transition: "background 0.2s", flexShrink: 0,
+              }}
+              aria-label="Toggle Steelman agent"
+            >
+              <span style={{
+                position: "absolute", top: 3, left: enableSteelman ? 23 : 3,
+                width: 18, height: 18, borderRadius: "50%", background: "#fff",
+                transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+              }} />
+            </button>
+            <div>
+              <div style={{ fontSize: ".85rem", fontWeight: 600, color: enableSteelman ? "#a5b4fc" : "var(--text2)" }}>
+                🛡️ Steelman Agent {enableSteelman ? "— ON" : "— OFF"}
+              </div>
+              <div style={{ fontSize: ".75rem", color: "var(--text3)", marginTop: 1 }}>
+                {enableSteelman
+                  ? "Builds the strongest case FOR your idea before the Adversary attacks — deeper, fairer debate"
+                  : "Skip the Steelman — Adversary attacks directly without a prior defense"}
+              </div>
+            </div>
           </div>
 
           {/* Controls */}
