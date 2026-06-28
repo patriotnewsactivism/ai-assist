@@ -51,11 +51,10 @@ function regexClassify(userInput: string): RouterOutput {
 
 // Provider + model candidates tried in order for routing
 const ROUTER_CANDIDATES: Array<{ provider: Provider; modelId: string }> = [
-  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
-  { provider: "gemini",    modelId: "gemini-2.5-flash" },
-  { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  { provider: "deepseek",  modelId: "deepseek-chat" },
-  { provider: "openai",    modelId: "gpt-4o-mini" },
+  { provider: "gemini",   modelId: "gemini-2.0-flash-lite" },
+  { provider: "deepseek", modelId: "deepseek-chat" },
+  { provider: "gemini",   modelId: "gemini-2.5-flash" },
+  { provider: "anthropic",modelId: "claude-sonnet-4-5" },
 ];
 
 function parseRouterResponse(content: string, userInput: string): RouterOutput {
