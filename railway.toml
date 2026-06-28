@@ -1,0 +1,13 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install && npm run build-frontend"
+
+[deploy]
+startCommand = "npx tsx server.ts"
+healthcheckPath = "/api/config"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "think-tank"
