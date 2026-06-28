@@ -9,11 +9,12 @@ interface Props {
 }
 
 const DEFAULT_MODELS: Record<AgentRole, { provider: Provider; modelId: string }> = {
-  researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-  adversary:   { provider: "deepseek", modelId: "deepseek-chat" },
-  expert:      { provider: "deepseek", modelId: "deepseek-reasoner" },
-  synthesizer: { provider: "deepseek", modelId: "deepseek-chat" },
-  judge:       { provider: "deepseek", modelId: "deepseek-chat" },
+  researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+  steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  expert:      { provider: "anthropic", modelId: "claude-sonnet-4-5" },
+  synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  judge:       { provider: "anthropic", modelId: "claude-sonnet-4-5" },
 };
 
 const PRESETS = [
@@ -28,35 +29,38 @@ type ModelPack = "fast" | "deep" | "mixed";
 const PACKS: Record<ModelPack, { label: string; desc: string; models: (avail: Provider[]) => Record<AgentRole, { provider: Provider; modelId: string }> }> = {
   fast: {
     label: "⚡ Fast",
-    desc: "All DeepSeek V3 — quickest results",
+    desc: "All Gemini Flash — quickest results",
     models: () => ({
-      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      { provider: "deepseek", modelId: "deepseek-chat" },
-      synthesizer: { provider: "deepseek", modelId: "deepseek-chat" },
-      judge:       { provider: "deepseek", modelId: "deepseek-chat" },
+      researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+      steelman:    { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+      adversary:   { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+      expert:      { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+      synthesizer: { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+      judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
     }),
   },
   deep: {
     label: "🧠 Deep",
-    desc: "R1 reasoning for Expert + Judge",
+    desc: "Gemini 2.5 Flash for all reasoning roles",
     models: () => ({
-      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      { provider: "deepseek", modelId: "deepseek-reasoner" },
-      synthesizer: { provider: "deepseek", modelId: "deepseek-chat" },
-      judge:       { provider: "deepseek", modelId: "deepseek-reasoner" },
+      researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+      steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
+      adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
+      expert:      { provider: "gemini",    modelId: "gemini-2.5-flash" },
+      synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
+      judge:       { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
     }),
   },
   mixed: {
     label: "🌐 Multi-Model",
-    desc: "Best model per role across providers",
+    desc: "Gemini + Claude — best model per role",
     models: (avail) => ({
-      researcher:  avail.includes("openai")     ? { provider: "openai",     modelId: "gpt-4o" }               : DEFAULT_MODELS.researcher,
-      adversary:   avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-6" }    : DEFAULT_MODELS.adversary,
-      expert:      { provider: "deepseek", modelId: "deepseek-reasoner" },
-      synthesizer: avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-6" }    : DEFAULT_MODELS.synthesizer,
-      judge:       avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-6" }    : DEFAULT_MODELS.judge,
+      researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+      steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
+      adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
+      expert:      avail.includes("anthropic") ? { provider: "anthropic", modelId: "claude-sonnet-4-5" } : { provider: "gemini", modelId: "gemini-2.5-flash" },
+      synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
+      judge:       avail.includes("anthropic") ? { provider: "anthropic", modelId: "claude-sonnet-4-5" } : { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
     }),
   },
 };
@@ -81,7 +85,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
   const [repoError, setRepoError]       = useState("");
   const [enableSteelman, setSteelman]   = useState(true);   // ON by default
 
-  const available = serverConfig?.availableProviders ?? ["deepseek"];
+  const available = serverConfig?.availableProviders ?? ["gemini"];
 
   const applyPack = (pack: ModelPack) => {
     setActivePack(pack);
