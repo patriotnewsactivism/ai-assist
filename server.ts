@@ -91,7 +91,7 @@ app.post("/api/repo/push", async (req, res) => {
 
 // POST /api/debate — start a think tank session, returns sessionId immediately
 app.post("/api/debate", (req, res) => {
-  const { input, maxRounds = 3, agentModels, customContext, qualityThreshold, expertDomain, repoUrl, repoToken } = req.body as {
+  const { input, maxRounds = 3, agentModels, customContext, qualityThreshold, expertDomain, repoUrl, repoToken, enableSteelman } = req.body as {
     input: string;
     maxRounds?: number;
     agentModels?: Record<AgentRole, { provider: Provider; modelId: string }>;
@@ -100,6 +100,7 @@ app.post("/api/debate", (req, res) => {
     expertDomain?: string;
     repoUrl?: string;
     repoToken?: string;
+    enableSteelman?: boolean;
   };
 
   if (!input?.trim()) {
