@@ -1,10 +1,9 @@
 import { load } from "cheerio";
-import { createRequire } from "module";
+import mammoth from "mammoth";
 
-const require = createRequire(import.meta.url);
-// pdf-parse is CommonJS — must be loaded via require in an ESM project
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+// tsx handles CJS→ESM interop for pdf-parse; import as default
+// @ts-expect-error — pdf-parse has no bundled types, CJS default export
+import pdfParse from "pdf-parse";
 
 const MAX_CHARS = 150_000;
 
@@ -14,21 +13,18 @@ function cap(text: string): string {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<string> {
-  const data = await pdfParse(buffer);
+  const data = await (pdfParse as (buf: Buffer) => Promise<{ text: string }>)(buffer);
   return cap(data.text);
 }
 
 export async function extractDocx(buffer: Buffer): Promise<string> {
-  const mammoth = await import("mammoth");
   const result = await mammoth.extractRawText({ buffer });
   return cap(result.value);
 }
 
 export function extractHtml(html: string): string {
   const $ = load(html);
-  // Remove noise
   $("script, style, nav, header, footer, aside, iframe, noscript, [class*='ad'], [id*='ad']").remove();
-  // Try main content areas first
   const main =
     $("article").text() ||
     $("main").text() ||
