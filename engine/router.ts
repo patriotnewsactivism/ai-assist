@@ -1,5 +1,5 @@
-import { callModel } from "./providers.js";
-import type { RouterOutput } from "./types.js";
+import { callModel, getAvailableProviders } from "./providers.js";
+import type { Provider, RouterOutput } from "./types.js";
 
 const ROUTER_SYSTEM_PROMPT = `You are an expert task classifier for an AI Think Tank system.
 Analyze the user's input and classify it into exactly one of three modes:
@@ -49,27 +49,44 @@ function regexClassify(userInput: string): RouterOutput {
   };
 }
 
+// Provider + model candidates tried in order for routing
+const ROUTER_CANDIDATES: Array<{ provider: Provider; modelId: string }> = [
+  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+  { provider: "anthropic", modelId: "claude-haiku-4-5-20251001" },
+  { provider: "deepseek",  modelId: "deepseek-chat" },
+  { provider: "openai",    modelId: "gpt-4o-mini" },
+];
+
+function parseRouterResponse(content: string, userInput: string): RouterOutput {
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No JSON object found in router response");
+  const parsed = JSON.parse(jsonMatch[0]);
+  return {
+    mode: parsed.mode ?? "RESEARCH_MODE",
+    confidence_score: Number(parsed.confidence_score ?? 85),
+    extracted_goal: String(parsed.extracted_goal ?? userInput.slice(0, 150)),
+    suggested_domain: String(parsed.suggested_domain ?? "general knowledge"),
+    reasoning: String(parsed.reasoning ?? ""),
+  };
+}
+
 export async function routeInput(userInput: string): Promise<RouterOutput> {
-  try {
-    const { content } = await callModel("gemini", "gemini-2.0-flash-lite", [
-      { role: "system", content: ROUTER_SYSTEM_PROMPT },
-      { role: "user", content: `Classify this task:\n\n${userInput}` },
-    ]);
+  const available = new Set(getAvailableProviders());
+  const messages = [
+    { role: "system" as const, content: ROUTER_SYSTEM_PROMPT },
+    { role: "user"   as const, content: `Classify this task:\n\n${userInput}` },
+  ];
 
-    // Extract JSON object from response, tolerating markdown fences or prose prefix
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON object found in router response");
-    const parsed = JSON.parse(jsonMatch[0]);
-
-    return {
-      mode: parsed.mode ?? "RESEARCH_MODE",
-      confidence_score: Number(parsed.confidence_score ?? 85),
-      extracted_goal: String(parsed.extracted_goal ?? userInput.slice(0, 150)),
-      suggested_domain: String(parsed.suggested_domain ?? "general knowledge"),
-      reasoning: String(parsed.reasoning ?? ""),
-    };
-  } catch (err) {
-    console.warn("[Router] AI classification failed, falling back to regex:", err);
-    return regexClassify(userInput);
+  for (const { provider, modelId } of ROUTER_CANDIDATES) {
+    if (!available.has(provider)) continue;
+    try {
+      const { content } = await callModel(provider, modelId, messages, { retries: 2, baseDelayMs: 500 });
+      return parseRouterResponse(content, userInput);
+    } catch (err) {
+      console.warn(`[Router] ${provider}/${modelId} failed, trying next candidate:`, (err as any)?.status ?? err);
+    }
   }
+
+  console.warn("[Router] All AI candidates exhausted, falling back to regex");
+  return regexClassify(userInput);
 }
