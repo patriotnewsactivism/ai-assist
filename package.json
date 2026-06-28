@@ -2,13 +2,11 @@
   "name": "ai-assist",
   "version": "1.0.0",
   "description": "AI Think Tank — multi-model adversarial debate engine",
-  "main": "server.js",
+  "main": "server.ts",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "npm run build-frontend && npm run build-server",
-    "build-frontend": "vite build",
-    "build-server": "tsc --outDir dist-server --module nodenext --moduleResolution nodenext --skipLibCheck server.ts engine/index.ts engine/agents.ts engine/fileparser.ts engine/github.ts engine/providers.ts engine/roundtable.ts engine/router.ts engine/sandbox.ts engine/search.ts engine/types.ts 2>/dev/null || tsc -p tsconfig.server.json",
-    "start": "node dist-server/server.js",
+    "build": "vite build",
+    "start": "npx tsx server.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -21,20 +19,20 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
     "@tavily/core": "^0.7.6",
+    "@vitejs/plugin-react": "^4.0.0",
     "dotenv": "^17.4.2",
     "express": "^4.18.2",
-    "openai": "^6.45.0"
+    "openai": "^6.45.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsx": "^4.22.4",
+    "vite": "^4.4.9"
   },
   "devDependencies": {
     "@types/express": "^4.17.17",
     "@types/node": "^26.0.1",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^4.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3",
-    "vite": "^4.4.9"
+    "typescript": "^6.0.3"
   }
 }
