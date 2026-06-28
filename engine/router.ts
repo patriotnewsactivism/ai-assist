@@ -56,9 +56,10 @@ export async function routeInput(userInput: string): Promise<RouterOutput> {
       { role: "user", content: `Classify this task:\n\n${userInput}` },
     ]);
 
-    // Strip markdown fences if model wraps in them
-    const cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
-    const parsed = JSON.parse(cleaned);
+    // Extract JSON object from response, tolerating markdown fences or prose prefix
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON object found in router response");
+    const parsed = JSON.parse(jsonMatch[0]);
 
     return {
       mode: parsed.mode ?? "RESEARCH_MODE",

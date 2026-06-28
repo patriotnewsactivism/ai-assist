@@ -84,6 +84,7 @@ export default function LiveDebate({ state }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const currentRound = state.thinking?.round ?? (state.turns[state.turns.length - 1]?.round ?? 1);
   const completedRoles = state.turns.filter((t) => t.round === currentRound).map((t) => t.role);
+  const pipelineRoles = ROLE_ORDER.filter((r) => r !== "steelman" || state.enableSteelman);
   const latestScore = state.rounds[state.rounds.length - 1]?.verdict.score;
 
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function LiveDebate({ state }: Props) {
       <div className="progress-strip">
         <div className="progress-round-badge">Round {currentRound}</div>
         <div className="pipeline">
-          {ROLE_ORDER.map((role, i) => {
+          {pipelineRoles.map((role, i) => {
             const status = getAgentStatus(role, state.thinking, completedRoles);
             return (
               <>
