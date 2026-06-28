@@ -343,7 +343,7 @@ export async function runRoundtable(
   }
 
   for (const dir of sandboxDirs) {
-    await cleanupSandbox(dir);
+    await cleanupSandbox(dir).catch((e) => console.warn("[Roundtable] Sandbox cleanup failed:", e));
   }
 
   emit({ type: "complete", data: { finalOutput: lastSynthesis, totalRounds: scoreHistory.length } });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ThinkTankInput from "./components/ThinkTankInput";
 import LiveDebate from "./components/LiveDebate";
 import FinalResult from "./components/FinalResult";
@@ -30,6 +30,7 @@ export interface AppState {
   thinking: ThinkingAgent | null;
   finalOutput: string;
   totalRounds: number;
+  enableSteelman: boolean;
   repoUrl?: string;
   error?: string;
 }
@@ -55,6 +56,7 @@ const EMPTY_STATE: AppState = {
   thinking: null,
   finalOutput: "",
   totalRounds: 0,
+  enableSteelman: true,
 };
 
 export default function App() {
@@ -68,8 +70,11 @@ export default function App() {
       .catch(console.error);
   }, []);
 
+  const sessionDoneRef = useRef(false);
+
   const handleStart = async (cfg: SessionConfig) => {
-    setState({ ...EMPTY_STATE, status: "running", ...(cfg.repoUrl ? { repoUrl: cfg.repoUrl } : {}) });
+    sessionDoneRef.current = false;
+    setState({ ...EMPTY_STATE, status: "running", enableSteelman: cfg.enableSteelman ?? true, ...(cfg.repoUrl ? { repoUrl: cfg.repoUrl } : {}) });
 
     let sessionId: string;
     try {
@@ -83,6 +88,7 @@ export default function App() {
           customContext: cfg.customContext || undefined,
           qualityThreshold: cfg.qualityThreshold,
           expertDomain: cfg.expertDomain || undefined,
+          enableSteelman: cfg.enableSteelman,
           repoUrl: cfg.repoUrl || undefined,
           repoToken: cfg.repoToken || undefined,
         }),
@@ -116,9 +122,11 @@ export default function App() {
           case "round_complete":
             return { ...prev, rounds: [...prev.rounds, event.data] };
           case "complete":
+            sessionDoneRef.current = true;
             es.close();
             return { ...prev, status: "complete", thinking: null, finalOutput: event.data.finalOutput, totalRounds: event.data.totalRounds };
           case "error":
+            sessionDoneRef.current = true;
             es.close();
             return { ...prev, status: "error", thinking: null, error: event.data.message };
           default:
@@ -128,6 +136,7 @@ export default function App() {
     };
 
     es.onerror = () => {
+      if (sessionDoneRef.current) return; // session already finished cleanly — ignore
       es.close();
       setState((s) => s.status !== "complete" ? { ...s, status: "error", error: "Connection lost — server may still be running" } : s);
     };

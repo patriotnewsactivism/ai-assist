@@ -51,7 +51,7 @@ export interface RoundResult {
   agents: AgentTurn[];
   synthesis: string;
   verdict: JudgeVerdict;
-  memory?: RoundMemory;
+  memory: RoundMemory;
 }
 
 export interface RouterOutput {

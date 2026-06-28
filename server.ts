@@ -22,6 +22,17 @@ import {
 import type { ThinkTankConfig, SSEEventPayload, AgentRole, Provider } from "./engine/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Validate at startup — fail fast with a clear message rather than a cryptic auth error on first request
+const GEMINI_KEY   = (process.env["GEMINI_API_KEY"]   || "").trim();
+const ANTHROPIC_KEY = (process.env["ANTHROPIC_API_KEY"] || "").trim();
+const DEEPSEEK_KEY  = (process.env["DEEPSEEK_API_KEY"]  || "").trim();
+const OPENAI_KEY    = (process.env["OPENAI_API_KEY"]    || "").trim();
+if (!GEMINI_KEY && !ANTHROPIC_KEY && !DEEPSEEK_KEY && !OPENAI_KEY) {
+  console.error("[Server] FATAL: No API keys configured. Set at least GEMINI_API_KEY or ANTHROPIC_API_KEY in your .env file.");
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env["PORT"] || 5000;
 
@@ -135,6 +146,7 @@ app.post("/api/debate", (req, res) => {
         ...(fullContext ? { customContext: fullContext } : {}),
         ...(qualityThreshold !== undefined ? { qualityThreshold } : {}),
         ...(expertDomain ? { expertDomain } : {}),
+        ...(enableSteelman !== undefined ? { enableSteelman } : {}),
       };
       const routing = await routeInput(config.input);
       emitter.emit("event", { type: "routing", data: routing } satisfies SSEEventPayload);
