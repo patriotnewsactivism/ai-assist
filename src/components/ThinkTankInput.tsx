@@ -83,7 +83,16 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
   const [repoFiles, setRepoFiles]       = useState<RepoFileInfo[] | null>(null);
   const [repoImporting, setRepoImporting] = useState(false);
   const [repoError, setRepoError]       = useState("");
-  const [enableSteelman, setSteelman]   = useState(true);   // ON by default
+  const [enableSteelman, setSteelman]   = useState(true);
+
+  // Document upload / URL state
+  const [docTab, setDocTab]             = useState<"file" | "url">("file");
+  const [docId, setDocId]               = useState<string | null>(null);
+  const [docMeta, setDocMeta]           = useState<{ label: string; chars: number } | null>(null);
+  const [docImporting, setDocImporting] = useState(false);
+  const [docError, setDocError]         = useState("");
+  const [docUrlInput, setDocUrlInput]   = useState("");
+  const [isDragOver, setIsDragOver]     = useState(false);
 
   const available = serverConfig?.availableProviders ?? ["gemini"];
 

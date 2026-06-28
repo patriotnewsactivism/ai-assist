@@ -45,6 +45,7 @@ export interface SessionConfig {
   enableSteelman?: boolean;
   repoUrl?: string;
   repoToken?: string;
+  docId?: string;
 }
 
 const EMPTY_STATE: AppState = {
@@ -91,6 +92,7 @@ export default function App() {
           enableSteelman: cfg.enableSteelman,
           repoUrl: cfg.repoUrl || undefined,
           repoToken: cfg.repoToken || undefined,
+          docId: cfg.docId || undefined,
         }),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);

@@ -5,6 +5,7 @@ export { isTavilyEnabled } from "./search.js";
 export { AGENT_META } from "./agents.js";
 export { fetchRepoFiles, buildRepoContext, createPullRequest, isGitHubConfigured } from "./github.js";
 export { parseFilesFromOutput } from "./fileparser.js";
+export { extractPdf, extractDocx, extractHtml, fetchUrl } from "./documents.js";
 export { runSandbox, cleanupSandbox } from "./sandbox.js";
 export type {
   Provider,
