@@ -280,9 +280,9 @@ export async function runRoundtable(
 }
 
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher: { provider: "deepseek", modelId: "deepseek-chat" },
-  adversary: { provider: "deepseek", modelId: "deepseek-chat" },
-  expert: { provider: "deepseek", modelId: "deepseek-reasoner" },
-  synthesizer: { provider: "deepseek", modelId: "deepseek-chat" },
-  judge: { provider: "deepseek", modelId: "deepseek-chat" },
+  researcher: { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  adversary: { provider: "gemini", modelId: "gemini-2.5-flash" },
+  expert: { provider: "gemini", modelId: "gemini-2.5-flash" },
+  synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
+  judge: { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
 };
