@@ -279,10 +279,31 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
+// DEFAULT_AGENT_MODELS — each role assigned to the provider/model that best
+// fits its personality. Mix providers intentionally: different training data
+// and RLHF philosophies mean genuine disagreement, not just paraphrasing.
+//
+// Role logic:
+//   researcher  → Gemini 2.0 Flash Lite  — fast, broad web-trained retrieval
+//   adversary   → Gemini 2.5 Flash        — deep reasoning finds the real holes
+//   expert      → Anthropic Claude Sonnet — nuanced, calibrated domain depth
+//   synthesizer → Gemini 2.5 Flash        — best long-form structured output
+//   judge       → Anthropic Claude Sonnet — careful, principled scoring
+//
+// If Anthropic key is not set, expert + judge fall back to gemini-2.5-flash.
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher: { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-  adversary: { provider: "gemini", modelId: "gemini-2.5-flash" },
-  expert: { provider: "gemini", modelId: "gemini-2.5-flash" },
+  researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+  adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  expert:      { provider: "anthropic", modelId: "claude-sonnet-4-5" },
+  synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  judge:       { provider: "anthropic", modelId: "claude-sonnet-4-5" },
+};
+
+// FALLBACK_AGENT_MODELS — all Gemini, used when only GEMINI_API_KEY is set
+export const FALLBACK_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
+  researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  adversary:   { provider: "gemini", modelId: "gemini-2.5-flash" },
+  expert:      { provider: "gemini", modelId: "gemini-2.5-flash" },
   synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
-  judge: { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
 };
