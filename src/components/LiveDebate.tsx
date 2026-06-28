@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import AgentCard from "./AgentCard";
 import JudgeCard from "./JudgeCard";
 import type { AppState, ThinkingAgent } from "../App";
-import type { AgentRole } from "../types";
+import type { AgentRole, SandboxResultEvent } from "../types";
 import { ROLE_COLORS, ROLE_ORDER } from "../types";
 
 interface Props {
@@ -39,6 +39,43 @@ function getAgentStatus(
   if (thinking?.role === role) return "active";
   if (completedRoles.includes(role)) return "complete";
   return "pending";
+}
+
+function SandboxCard({ result }: { result: SandboxResultEvent }) {
+  const [expanded, setExpanded] = useState(!result.builds.every((b) => b.success));
+  const ok = result.builds.every((b) => b.success) && result.builds.length > 0;
+
+  return (
+    <div className={`sandbox-card ${ok ? "sandbox-pass" : "sandbox-fail"}`}>
+      <div className="sandbox-header" onClick={() => setExpanded(!expanded)} style={{ cursor: "pointer" }}>
+        <span className="sandbox-icon">{ok ? "✅" : "❌"}</span>
+        <span className="sandbox-title">
+          Sandbox Build — Round {result.round}
+          {" · "}{result.filesWritten} file{result.filesWritten !== 1 ? "s" : ""}
+        </span>
+        <span className="sandbox-toggle">{expanded ? "▲" : "▼"}</span>
+      </div>
+      {expanded && (
+        <div className="sandbox-body">
+          {result.builds.length === 0 ? (
+            <div className="sandbox-msg">{result.summary}</div>
+          ) : (
+            result.builds.map((b, i) => (
+              <div key={i} className={`sandbox-step ${b.success ? "pass" : "fail"}`}>
+                <div className="sandbox-step-cmd">
+                  {b.success ? "✓" : "✗"} <code>{b.command}</code>
+                  <span className="sandbox-step-ms">{b.duration}ms</span>
+                </div>
+                {(b.stderr || b.stdout) && !b.success && (
+                  <pre className="sandbox-step-out">{(b.stderr || b.stdout).trim().slice(0, 1500)}</pre>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function LiveDebate({ state }: Props) {
@@ -114,6 +151,9 @@ export default function LiveDebate({ state }: Props) {
           const roundData = turn.role === "judge"
             ? state.rounds.find((r) => r.round === turn.round)
             : null;
+          const sandboxResult = turn.role === "synthesizer"
+            ? state.sandboxResults.find((s) => s.round === turn.round)
+            : null;
 
           return (
             <div key={`${turn.round}-${turn.role}`}>
@@ -121,12 +161,28 @@ export default function LiveDebate({ state }: Props) {
                 <div className="round-label">Round {turn.round}</div>
               )}
               <AgentCard turn={turn} />
+              {sandboxResult && <SandboxCard result={sandboxResult} />}
               {roundData && (
                 <JudgeCard verdict={roundData.verdict} round={turn.round} />
               )}
             </div>
           );
         })}
+
+        {/* Sandbox building placeholder — shows when synthesizer just completed but sandbox hasn't reported yet */}
+        {state.turns[state.turns.length - 1]?.role === "synthesizer" &&
+          !state.sandboxResults.find((s) => s.round === state.turns[state.turns.length - 1]?.round) &&
+          state.thinking === null && state.status === "running" && (
+          <div className="sandbox-card sandbox-building">
+            <div className="sandbox-header">
+              <span className="sandbox-icon">🔨</span>
+              <span className="sandbox-title">Running sandbox build...</span>
+              <div className="dots" style={{ marginLeft: "auto" }}>
+                <div className="dot" /><div className="dot" /><div className="dot" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Thinking placeholder */}
         {state.thinking && (

@@ -120,7 +120,22 @@ You receive research, critique, and expert input. Your job:
 4. Produce COMPLETE, RUNNABLE, PRODUCTION-READY code
 5. Include all necessary files, imports, error handling, and documentation
 
-Do not summarize. Do not explain what you'll do. Write the complete, final code. No placeholders. No TODOs.`
+CRITICAL OUTPUT FORMAT — you MUST use this exact format for every file:
+
+=== FILE: path/to/filename.ext ===
+\`\`\`language
+// complete file content here
+\`\`\`
+
+Example:
+=== FILE: src/index.ts ===
+\`\`\`typescript
+import express from "express";
+const app = express();
+// ...
+\`\`\`
+
+Output EVERY file using this format. No placeholders. No TODOs. Complete, runnable code only.`
       : `You are The Synthesizer — the master analyst who distills everything into the definitive output. Goal: "${goal}".
 
 You receive research, critique, and expert input. Your job:

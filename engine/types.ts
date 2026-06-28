@@ -48,6 +48,11 @@ export interface RouterOutput {
   suggested_domain: string;
 }
 
+export interface RepoFile {
+  path: string;
+  content: string;
+}
+
 export interface ThinkTankConfig {
   input: string;
   maxRounds: number;
@@ -57,10 +62,25 @@ export interface ThinkTankConfig {
   expertDomain?: string;
 }
 
+export interface SandboxBuild {
+  success: boolean;
+  command: string;
+  stdout: string;
+  stderr: string;
+  duration: number;
+}
+
+export interface SandboxRunResult {
+  filesWritten: number;
+  builds: SandboxBuild[];
+  summary: string;
+}
+
 export type SSEEventPayload =
   | { type: "routing"; data: RouterOutput }
   | { type: "agent_thinking"; data: { role: AgentRole; name: string; emoji: string; round: number } }
   | { type: "agent_complete"; data: AgentTurn }
+  | { type: "sandbox_result"; data: { round: number } & SandboxRunResult }
   | { type: "round_complete"; data: RoundResult }
   | { type: "complete"; data: { finalOutput: string; totalRounds: number } }
   | { type: "error"; data: { message: string } };

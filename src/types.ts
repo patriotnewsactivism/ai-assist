@@ -42,17 +42,40 @@ export interface RouterOutput {
   suggested_domain: string;
 }
 
+export interface SandboxBuild {
+  success: boolean;
+  command: string;
+  stdout: string;
+  stderr: string;
+  duration: number;
+}
+
+export interface SandboxRunResult {
+  filesWritten: number;
+  builds: SandboxBuild[];
+  summary: string;
+}
+
+export type SandboxResultEvent = { round: number } & SandboxRunResult;
+
 export type SSEEventPayload =
   | { type: "routing"; data: RouterOutput }
   | { type: "agent_thinking"; data: { role: AgentRole; name: string; emoji: string; round: number } }
   | { type: "agent_complete"; data: AgentTurn }
+  | { type: "sandbox_result"; data: SandboxResultEvent }
   | { type: "round_complete"; data: RoundResult }
   | { type: "complete"; data: { finalOutput: string; totalRounds: number } }
   | { type: "error"; data: { message: string } };
 
+export interface RepoFileInfo {
+  path: string;
+  size: number;
+}
+
 export interface ServerConfig {
   availableProviders: Provider[];
   tavilyEnabled: boolean;
+  githubConfigured: boolean;
   agentMeta: Record<AgentRole, { name: string; emoji: string; description: string }>;
   defaultModels: Record<AgentRole, { provider: Provider; modelId: string }>;
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AgentRole, Provider, ServerConfig } from "../types";
+import type { AgentRole, Provider, ServerConfig, RepoFileInfo } from "../types";
 import { ROLE_COLORS, ROLE_ORDER, PROVIDER_MODELS } from "../types";
 import type { SessionConfig } from "../App";
 
@@ -73,6 +73,13 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
   const [activePack, setActivePack]     = useState<ModelPack>("deep");
   const [agentModels, setAgentModels]   = useState<Record<AgentRole, { provider: Provider; modelId: string }>>(DEFAULT_MODELS);
 
+  // Repository import state
+  const [repoUrl, setRepoUrl]           = useState("");
+  const [repoToken, setRepoToken]       = useState("");
+  const [repoFiles, setRepoFiles]       = useState<RepoFileInfo[] | null>(null);
+  const [repoImporting, setRepoImporting] = useState(false);
+  const [repoError, setRepoError]       = useState("");
+
   const available = serverConfig?.availableProviders ?? ["deepseek"];
 
   const applyPack = (pack: ModelPack) => {
@@ -91,10 +98,49 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
     }
   };
 
+  const handleImportRepo = async () => {
+    if (!repoUrl.trim()) return;
+    setRepoImporting(true);
+    setRepoError("");
+    setRepoFiles(null);
+    try {
+      const res = await fetch("/api/repo/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl: repoUrl.trim(), token: repoToken || undefined }),
+      });
+      const data = await res.json() as { files?: RepoFileInfo[]; context?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Import failed");
+      setRepoFiles(data.files ?? []);
+      // Inject repo context into customContext
+      if (data.context) setCustomCtx(data.context);
+    } catch (err) {
+      setRepoError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setRepoImporting(false);
+    }
+  };
+
+  const handleClearRepo = () => {
+    setRepoUrl("");
+    setRepoToken("");
+    setRepoFiles(null);
+    setRepoError("");
+    setCustomCtx("");
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
-    onStart({ input: input.trim(), maxRounds, qualityThreshold: threshold, customContext, expertDomain, agentModels });
+    onStart({
+      input: input.trim(),
+      maxRounds,
+      qualityThreshold: threshold,
+      customContext,
+      expertDomain,
+      agentModels,
+      ...(repoUrl.trim() ? { repoUrl: repoUrl.trim() } : {}),
+    });
   };
 
   const agentMeta = serverConfig?.agentMeta;
@@ -174,6 +220,70 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
               </div>
               <div className="control-hint">Judge approves when score reaches this number.</div>
             </div>
+          </div>
+
+          {/* Repository import */}
+          <div className="repo-section">
+            <div className="repo-section-header">
+              <span className="repo-section-title">📁 Import GitHub Repository</span>
+              <span className="repo-section-sub">Feed the codebase to all agents — results can be pushed back as a PR</span>
+            </div>
+
+            {repoFiles ? (
+              <div className="repo-imported">
+                <div className="repo-imported-info">
+                  <span className="repo-imported-icon">✅</span>
+                  <div>
+                    <div className="repo-imported-name">{repoUrl}</div>
+                    <div className="repo-imported-count">{repoFiles.length} files imported · {Math.round(repoFiles.reduce((s, f) => s + f.size, 0) / 1024)}KB of context</div>
+                  </div>
+                </div>
+                <button type="button" className="btn btn-ghost" style={{ fontSize: ".78rem", padding: "4px 10px" }} onClick={handleClearRepo}>
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <div className="repo-input-row">
+                <input
+                  type="text"
+                  className="repo-url-input"
+                  placeholder="https://github.com/owner/repo"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleImportRepo())}
+                />
+                {!serverConfig?.githubConfigured && (
+                  <input
+                    type="password"
+                    className="repo-token-input"
+                    placeholder="Token (private repos)"
+                    value={repoToken}
+                    onChange={(e) => setRepoToken(e.target.value)}
+                  />
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost repo-import-btn"
+                  disabled={!repoUrl.trim() || repoImporting}
+                  onClick={handleImportRepo}
+                >
+                  {repoImporting ? "Importing..." : "Import"}
+                </button>
+              </div>
+            )}
+
+            {repoError && <div className="repo-error">{repoError}</div>}
+
+            {repoFiles && repoFiles.length > 0 && (
+              <div className="repo-file-list">
+                {repoFiles.slice(0, 12).map((f) => (
+                  <span key={f.path} className="repo-file-chip">{f.path}</span>
+                ))}
+                {repoFiles.length > 12 && (
+                  <span className="repo-file-chip" style={{ opacity: .6 }}>+{repoFiles.length - 12} more</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Advanced toggle */}

@@ -9,6 +9,7 @@ import type {
   Provider,
   RouterOutput,
   RoundResult,
+  SandboxResultEvent,
   ServerConfig,
   SSEEventPayload,
 } from "./types";
@@ -25,9 +26,11 @@ export interface AppState {
   routing: RouterOutput | null;
   rounds: RoundResult[];
   turns: AgentTurn[];
+  sandboxResults: SandboxResultEvent[];
   thinking: ThinkingAgent | null;
   finalOutput: string;
   totalRounds: number;
+  repoUrl?: string;
   error?: string;
 }
 
@@ -38,6 +41,7 @@ export interface SessionConfig {
   customContext: string;
   expertDomain: string;
   agentModels: Record<AgentRole, { provider: Provider; modelId: string }>;
+  repoUrl?: string;
 }
 
 const EMPTY_STATE: AppState = {
@@ -45,6 +49,7 @@ const EMPTY_STATE: AppState = {
   routing: null,
   rounds: [],
   turns: [],
+  sandboxResults: [],
   thinking: null,
   finalOutput: "",
   totalRounds: 0,
@@ -62,7 +67,7 @@ export default function App() {
   }, []);
 
   const handleStart = async (cfg: SessionConfig) => {
-    setState({ ...EMPTY_STATE, status: "running" });
+    setState({ ...EMPTY_STATE, status: "running", ...(cfg.repoUrl ? { repoUrl: cfg.repoUrl } : {}) });
 
     let sessionId: string;
     try {
@@ -102,6 +107,8 @@ export default function App() {
             return { ...prev, thinking: event.data };
           case "agent_complete":
             return { ...prev, thinking: null, turns: [...prev.turns, event.data] };
+          case "sandbox_result":
+            return { ...prev, sandboxResults: [...prev.sandboxResults, event.data] };
           case "round_complete":
             return { ...prev, rounds: [...prev.rounds, event.data] };
           case "complete":

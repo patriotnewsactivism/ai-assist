@@ -1,6 +1,8 @@
 import { callModel } from "./providers.js";
 import { webSearch, buildSearchQueries } from "./search.js";
 import { AGENT_META, getSystemPrompt } from "./agents.js";
+import { parseFilesFromOutput } from "./fileparser.js";
+import { runSandbox, cleanupSandbox } from "./sandbox.js";
 import type {
   AgentRole,
   AgentTurn,
@@ -8,6 +10,7 @@ import type {
   JudgeVerdict,
   RoundResult,
   RouterOutput,
+  SandboxRunResult,
   ThinkTankConfig,
 } from "./types.js";
 
@@ -26,6 +29,7 @@ async function runAgent(
     expertOutput: string;
     searchResults: import("./types.js").SearchResult[];
     scores: number[];
+    extraJudgeContext?: string;
   },
   emit: EmitFn
 ): Promise<AgentTurn> {
@@ -121,7 +125,7 @@ Produce the complete, refined output now.`;
       : "This is round 1.";
 
     userContent = `GOAL: ${routing.extracted_goal}
-${scoreHistory}
+${scoreHistory}${context.extraJudgeContext ?? ""}
 
 OUTPUT TO EVALUATE:
 ${context.previousSynthesis}
@@ -177,9 +181,12 @@ export async function runRoundtable(
   routing: RouterOutput,
   emit: EmitFn
 ): Promise<string> {
+  const isCode = routing.mode === "CODE_MODE";
   let lastSynthesis = "";
   let lastWeaknesses: string[] = [];
+  let lastSandboxSummary = "";
   const scoreHistory: number[] = [];
+  const sandboxDirs: string[] = [];
 
   for (let round = 1; round <= config.maxRounds; round++) {
     console.log(`\n=== ROUND ${round} ===`);
@@ -189,15 +196,26 @@ export async function runRoundtable(
     let adversaryOutput = "";
     let expertOutput = "";
 
+    // Append previous sandbox result to weaknesses context for researcher
+    const effectiveWeaknesses = lastSandboxSummary
+      ? [`Build result from last round: ${lastSandboxSummary}`, ...lastWeaknesses]
+      : lastWeaknesses;
+
     for (const role of ROLES_IN_ORDER) {
+      // For the judge in CODE_MODE, append sandbox result to judge context
+      const sandboxNote = (role === "judge" && lastSandboxSummary && round > 1)
+        ? `\n\nBUILD SANDBOX RESULT (this round): ${lastSandboxSummary}`
+        : "";
+
       const turn = await runAgent(role, config, routing, round, {
         previousSynthesis: lastSynthesis,
-        previousWeaknesses: lastWeaknesses,
+        previousWeaknesses: effectiveWeaknesses,
         researchOutput,
         adversaryOutput,
         expertOutput,
         searchResults: [],
         scores: scoreHistory,
+        extraJudgeContext: sandboxNote,
       }, emit);
 
       roundAgents.push(turn);
@@ -205,7 +223,30 @@ export async function runRoundtable(
       if (role === "researcher") researchOutput = turn.output;
       if (role === "adversary") adversaryOutput = turn.output;
       if (role === "expert") expertOutput = turn.output;
-      if (role === "synthesizer") lastSynthesis = turn.output;
+      if (role === "synthesizer") {
+        lastSynthesis = turn.output;
+
+        // In CODE_MODE, run the sandbox after each synthesis
+        if (isCode) {
+          const files = parseFilesFromOutput(lastSynthesis);
+          if (files.length > 0) {
+            console.log(`[Sandbox] Running build for round ${round} (${files.length} files)...`);
+            const sandboxResult = await runSandbox(files);
+            sandboxDirs.push(sandboxResult.dir);
+            lastSandboxSummary = sandboxResult.summary;
+
+            const sbPayload: SandboxRunResult = {
+              filesWritten: sandboxResult.filesWritten,
+              builds: sandboxResult.builds,
+              summary: sandboxResult.summary,
+            };
+            emit({ type: "sandbox_result", data: { round, ...sbPayload } });
+            console.log(`[Sandbox] Round ${round}: ${sandboxResult.summary.slice(0, 80)}`);
+          } else {
+            lastSandboxSummary = "No file blocks found in synthesizer output — cannot build.";
+          }
+        }
+      }
     }
 
     const judgeRaw = roundAgents.find((a) => a.role === "judge")?.output ?? "";
@@ -227,6 +268,11 @@ export async function runRoundtable(
     if (verdict.approved || verdict.score >= threshold) {
       break;
     }
+  }
+
+  // Clean up sandbox directories
+  for (const dir of sandboxDirs) {
+    await cleanupSandbox(dir);
   }
 
   emit({ type: "complete", data: { finalOutput: lastSynthesis, totalRounds: scoreHistory.length } });

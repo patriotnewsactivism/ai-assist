@@ -2,13 +2,14 @@ import { useState } from "react";
 import JudgeCard from "./JudgeCard";
 import AgentCard from "./AgentCard";
 import type { AppState } from "../App";
+import type { RepoFileInfo } from "../types";
 
 interface Props {
   state: AppState;
   onReset: () => void;
 }
 
-type Tab = "output" | "rounds" | "export";
+type Tab = "output" | "rounds" | "export" | "push";
 
 function scoreColor(score: number): string {
   if (score >= 88) return "var(--green)";
@@ -56,6 +57,46 @@ function buildMarkdownExport(state: AppState): string {
 export default function FinalResult({ state, onReset }: Props) {
   const [tab, setTab]     = useState<Tab>("output");
   const [copied, setCopied] = useState(false);
+
+  // GitHub push state
+  const [prTitle, setPrTitle] = useState(
+    state.routing ? `Think Tank: ${state.routing.extracted_goal.slice(0, 60)}` : "Think Tank: AI-generated changes"
+  );
+  const [ghToken, setGhToken] = useState("");
+  const [pushing, setPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<{ prUrl?: string; error?: string } | null>(null);
+  const [detectedFiles, setDetectedFiles] = useState<RepoFileInfo[] | null>(null);
+
+  const isCodeMode = state.routing?.mode === "CODE_MODE";
+
+  const detectFiles = async () => {
+    const res = await fetch("/api/repo/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repoUrl: state.repoUrl ?? "", finalOutput: state.finalOutput, prTitle, token: ghToken || undefined }),
+    });
+    const data = await res.json() as { prUrl?: string; filesCommitted?: number; error?: string };
+    return data;
+  };
+
+  const handlePush = async () => {
+    if (!state.repoUrl) return;
+    setPushing(true);
+    setPushResult(null);
+    try {
+      const data = await detectFiles();
+      if (data.error) {
+        setPushResult({ error: data.error });
+      } else if (data.prUrl) {
+        setPushResult({ prUrl: data.prUrl });
+        if (data.filesCommitted) setDetectedFiles(Array.from({ length: data.filesCommitted }, (_, i) => ({ path: `file ${i + 1}`, size: 0 })));
+      }
+    } catch (err) {
+      setPushResult({ error: err instanceof Error ? err.message : "Push failed" });
+    } finally {
+      setPushing(false);
+    }
+  };
 
   const scores = state.rounds.map((r) => r.verdict.score);
   const topScore = scores.length > 0 ? Math.max(...scores) : 0;
@@ -140,13 +181,16 @@ export default function FinalResult({ state, onReset }: Props) {
 
       {/* Tabs */}
       <div className="result-tabs">
-        {(["output", "rounds", "export"] as Tab[]).map((t) => (
+        {(["output", "rounds", "export", ...(isCodeMode ? ["push"] : [])] as Tab[]).map((t) => (
           <button
             key={t}
             className={`r-tab ${tab === t ? "active" : ""}`}
             onClick={() => setTab(t)}
           >
-            {t === "output" ? "📄 Final Output" : t === "rounds" ? `🔄 Debate History (${state.rounds.length} rounds)` : "💾 Export"}
+            {t === "output" ? "📄 Final Output"
+              : t === "rounds" ? `🔄 Debate History (${state.rounds.length} rounds)`
+              : t === "push" ? "🚀 Push to GitHub"
+              : "💾 Export"}
           </button>
         ))}
       </div>
@@ -207,6 +251,90 @@ export default function FinalResult({ state, onReset }: Props) {
               {copied ? "✓ Copied!" : "Copy to Clipboard"}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Push to GitHub tab */}
+      {tab === "push" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {!state.repoUrl ? (
+            <div className="input-card" style={{ padding: 24 }}>
+              <h3 style={{ marginBottom: 8, fontSize: "1rem" }}>🚀 Push to GitHub</h3>
+              <p style={{ color: "var(--text2)", fontSize: ".88rem", lineHeight: 1.6 }}>
+                No repository was imported for this session. Start a new session and import a GitHub repository first — then the Think Tank can push its changes directly as a pull request.
+              </p>
+              <button className="btn btn-primary" onClick={onReset} style={{ marginTop: 16 }}>
+                ⚡ New Session with Repository
+              </button>
+            </div>
+          ) : (
+            <div className="input-card" style={{ padding: 24 }}>
+              <h3 style={{ marginBottom: 4, fontSize: "1rem" }}>🚀 Create Pull Request</h3>
+              <p style={{ color: "var(--text3)", fontSize: ".82rem", marginBottom: 16 }}>
+                Repository: <code style={{ color: "var(--blue)" }}>{state.repoUrl}</code>
+              </p>
+
+              {pushResult?.prUrl ? (
+                <div className="push-success">
+                  <div className="push-success-icon">✅</div>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Pull request created!</div>
+                    <a
+                      href={pushResult.prUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="push-pr-link"
+                    >
+                      {pushResult.prUrl}
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div>
+                      <div className="control-label" style={{ marginBottom: 6 }}>PR title</div>
+                      <input
+                        type="text"
+                        className="repo-url-input"
+                        value={prTitle}
+                        onChange={(e) => setPrTitle(e.target.value)}
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                    <div>
+                      <div className="control-label" style={{ marginBottom: 6 }}>GitHub token (if not set in .env)</div>
+                      <input
+                        type="password"
+                        className="repo-url-input"
+                        placeholder="ghp_... (needs repo write access)"
+                        value={ghToken}
+                        onChange={(e) => setGhToken(e.target.value)}
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                  </div>
+
+                  {pushResult?.error && (
+                    <div className="repo-error" style={{ marginTop: 12 }}>{pushResult.error}</div>
+                  )}
+
+                  <button
+                    className="btn btn-primary"
+                    onClick={handlePush}
+                    disabled={pushing || !prTitle.trim()}
+                    style={{ marginTop: 16, fontSize: ".9rem" }}
+                  >
+                    {pushing ? "Creating PR..." : "🚀 Create Pull Request"}
+                  </button>
+
+                  <p style={{ color: "var(--text3)", fontSize: ".78rem", marginTop: 10, lineHeight: 1.5 }}>
+                    The Think Tank's output will be parsed for <code>=== FILE: path ===</code> blocks and committed to a new branch. A PR will be opened against the default branch.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 

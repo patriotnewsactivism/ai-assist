@@ -11,7 +11,12 @@ import {
   DEFAULT_AGENT_MODELS,
   getAvailableProviders,
   isTavilyEnabled,
+  isGitHubConfigured,
   AGENT_META,
+  fetchRepoFiles,
+  buildRepoContext,
+  createPullRequest,
+  parseFilesFromOutput,
 } from "./engine/index.js";
 import type { ThinkTankConfig, SSEEventPayload, AgentRole, Provider } from "./engine/index.js";
 
@@ -31,9 +36,56 @@ app.get("/api/config", (_req, res) => {
   res.json({
     availableProviders: getAvailableProviders(),
     tavilyEnabled: isTavilyEnabled(),
+    githubConfigured: isGitHubConfigured(),
     agentMeta: AGENT_META,
     defaultModels: DEFAULT_AGENT_MODELS,
   });
+});
+
+// POST /api/repo/import — fetch a GitHub repo's files as context
+app.post("/api/repo/import", async (req, res) => {
+  const { repoUrl, token } = req.body as { repoUrl: string; token?: string };
+  if (!repoUrl) return res.status(400).json({ error: "repoUrl is required" });
+  const effectiveToken = token || (process.env["GITHUB_TOKEN"] ?? "").trim() || undefined;
+  try {
+    const files = await fetchRepoFiles(repoUrl, effectiveToken);
+    const context = buildRepoContext(files);
+    res.json({ files: files.map((f) => ({ path: f.path, size: f.content.length })), context });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Import failed";
+    res.status(400).json({ error: message });
+  }
+});
+
+// POST /api/repo/push — parse file changes from output and create a GitHub PR
+app.post("/api/repo/push", async (req, res) => {
+  const { repoUrl, finalOutput, prTitle, token } = req.body as {
+    repoUrl: string;
+    finalOutput: string;
+    prTitle: string;
+    token?: string;
+  };
+
+  if (!repoUrl || !finalOutput) return res.status(400).json({ error: "repoUrl and finalOutput are required" });
+
+  const effectiveToken = token || (process.env["GITHUB_TOKEN"] ?? "").trim();
+  if (!effectiveToken) return res.status(400).json({ error: "GitHub token required — add GITHUB_TOKEN to .env or provide it in the request" });
+
+  const files = parseFilesFromOutput(finalOutput);
+  if (files.length === 0) {
+    return res.status(400).json({
+      error: "No files detected in the output. Make sure the session ran in CODE_MODE and the synthesizer produced === FILE: path === blocks.",
+    });
+  }
+
+  try {
+    const prBody = `## AI Think Tank Output\n\nThis PR was generated automatically by the AI Think Tank.\n\n**Files changed:** ${files.length}\n\n${files.map((f) => `- \`${f.path}\``).join("\n")}`;
+    const prUrl = await createPullRequest(repoUrl, files, prTitle || "Think Tank: AI-generated changes", prBody, effectiveToken);
+    res.json({ prUrl, filesCommitted: files.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Push failed";
+    res.status(400).json({ error: message });
+  }
 });
 
 // POST /api/debate — start a think tank session, returns sessionId immediately
