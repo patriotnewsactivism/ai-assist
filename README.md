@@ -28,7 +28,17 @@ npm install
 Create a `.env` file in the root directory:
 
 ```
-DEEPSEEK_API_KEY=your_key_here
+# Required — primary AI provider
+GEMINI_API_KEY=your_gemini_key_here
+
+# Optional — add any of these to unlock additional providers
+OPENAI_API_KEY=your_openai_key_here
+ANTHROPIC_API_KEY=your_anthropic_key_here
+DEEPSEEK_API_KEY=your_deepseek_key_here   # only if credits available
+
+# Optional features
+TAVILY_API_KEY=your_tavily_key_here       # enables live web search
+GITHUB_TOKEN=your_github_token_here       # enables repo import + PR push
 ```
 
 ### Development
