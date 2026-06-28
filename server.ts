@@ -9,6 +9,7 @@ import {
   routeInput,
   runRoundtable,
   DEFAULT_AGENT_MODELS,
+  FALLBACK_AGENT_MODELS,
   getAvailableProviders,
   isTavilyEnabled,
   isGitHubConfigured,
@@ -124,7 +125,12 @@ app.post("/api/debate", (req, res) => {
       const config: ThinkTankConfig = {
         input: input.trim(),
         maxRounds: Math.min(Math.max(1, maxRounds), 8),
-        agentModels: agentModels ?? DEFAULT_AGENT_MODELS,
+        // Auto-fallback: if no Anthropic key, use all-Gemini lineup
+        agentModels: agentModels ?? (
+          (process.env["ANTHROPIC_API_KEY"] || "").trim()
+            ? DEFAULT_AGENT_MODELS
+            : FALLBACK_AGENT_MODELS
+        ),
         ...(fullContext ? { customContext: fullContext } : {}),
         ...(qualityThreshold !== undefined ? { qualityThreshold } : {}),
         ...(expertDomain ? { expertDomain } : {}),
