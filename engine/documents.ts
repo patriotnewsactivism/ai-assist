@@ -8,7 +8,9 @@ function cap(text: string): string {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<string> {
-  const pdfParse = (await import("pdf-parse")).default;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mod = await import("pdf-parse") as any;
+  const pdfParse = mod.default ?? mod;
   const data = await pdfParse(buffer);
   return cap(data.text);
 }
@@ -32,7 +34,7 @@ export function extractHtml(html: string): string {
   return cap(main.replace(/\s{3,}/g, "\n\n"));
 }
 
-export async function fetchUrl(url: string): Promise<{ text: string; title?: string; contentType: string }> {
+export async function fetchUrl(url: string): Promise<{ text: string; title: string | undefined; contentType: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
 
@@ -49,7 +51,7 @@ export async function fetchUrl(url: string): Promise<{ text: string; title?: str
     if (contentType.includes("application/pdf")) {
       const buf = Buffer.from(await res.arrayBuffer());
       const text = await extractPdf(buf);
-      return { text, contentType: "pdf" };
+      return { text, title: undefined, contentType: "pdf" };
     }
 
     const raw = await res.text();
@@ -61,7 +63,7 @@ export async function fetchUrl(url: string): Promise<{ text: string; title?: str
       return { text, title, contentType: "html" };
     }
 
-    return { text: cap(raw), contentType: "text" };
+    return { text: cap(raw), title: undefined, contentType: "text" };
   } finally {
     clearTimeout(timeout);
   }

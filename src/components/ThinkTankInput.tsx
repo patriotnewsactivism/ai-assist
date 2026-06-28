@@ -141,6 +141,66 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
     setCustomCtx("");
   };
 
+  const DOC_DEFAULT_TASK = "Review and improve this document to the highest possible quality — make it the absolute best version possible.";
+
+  const applyDocResult = (id: string, label: string, chars: number) => {
+    setDocId(id);
+    setDocMeta({ label, chars });
+    setDocError("");
+    if (!input.trim()) setInput(DOC_DEFAULT_TASK);
+  };
+
+  const handleUploadFiles = async (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
+    setDocImporting(true);
+    setDocError("");
+    setDocId(null);
+    setDocMeta(null);
+    const form = new FormData();
+    for (const f of Array.from(files)) form.append("files", f);
+    try {
+      const res = await fetch("/api/documents/upload", { method: "POST", body: form });
+      const data = await res.json() as { docId?: string; files?: {name:string}[]; totalChars?: number; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      const names = (data.files ?? []).map((f: {name:string}) => f.name).join(", ");
+      applyDocResult(data.docId!, names, data.totalChars!);
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setDocImporting(false);
+    }
+  };
+
+  const handleFetchUrl = async () => {
+    if (!docUrlInput.trim()) return;
+    setDocImporting(true);
+    setDocError("");
+    setDocId(null);
+    setDocMeta(null);
+    try {
+      const res = await fetch("/api/documents/fetch-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: docUrlInput.trim() }),
+      });
+      const data = await res.json() as { docId?: string; title?: string; url?: string; totalChars?: number; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Fetch failed");
+      const label = data.title || new URL(data.url!).hostname;
+      applyDocResult(data.docId!, label, data.totalChars!);
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Fetch failed");
+    } finally {
+      setDocImporting(false);
+    }
+  };
+
+  const handleClearDoc = () => {
+    setDocId(null);
+    setDocMeta(null);
+    setDocError("");
+    setDocUrlInput("");
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -152,6 +212,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
       expertDomain,
       agentModels,
       enableSteelman,
+      ...(docId ? { docId } : {}),
       ...(repoUrl.trim() ? { repoUrl: repoUrl.trim(), ...(repoToken.trim() ? { repoToken: repoToken.trim() } : {}) } : {}),
     });
   };
@@ -326,6 +387,105 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Document upload / URL section */}
+          <div className="repo-section">
+            <div className="repo-section-header">
+              <span className="repo-section-title">📄 Improve a Document or Article</span>
+              <span className="repo-section-sub">Upload a file or paste a URL — agents will debate and refine it</span>
+            </div>
+
+            {/* Tab toggle */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              {(["file", "url"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => { setDocTab(tab); handleClearDoc(); }}
+                  style={{
+                    padding: "5px 14px", borderRadius: 8, fontSize: ".8rem", fontWeight: 600, cursor: "pointer",
+                    border: docTab === tab ? "1px solid var(--blue)" : "1px solid rgba(255,255,255,0.1)",
+                    background: docTab === tab ? "rgba(59,130,246,0.15)" : "transparent",
+                    color: docTab === tab ? "var(--blue)" : "var(--text3)",
+                  }}
+                >
+                  {tab === "file" ? "📄 Upload File" : "🔗 Paste URL"}
+                </button>
+              ))}
+            </div>
+
+            {docMeta ? (
+              <div className="repo-imported">
+                <div className="repo-imported-info">
+                  <span className="repo-imported-icon">✅</span>
+                  <div>
+                    <div className="repo-imported-name">{docMeta.label}</div>
+                    <div className="repo-imported-count">~{docMeta.chars.toLocaleString()} chars loaded</div>
+                  </div>
+                </div>
+                <button type="button" className="btn btn-ghost" style={{ fontSize: ".78rem", padding: "4px 10px" }} onClick={handleClearDoc}>
+                  Clear
+                </button>
+              </div>
+            ) : docTab === "file" ? (
+              <div
+                className={`repo-input-row`}
+                style={{
+                  flexDirection: "column", gap: 0,
+                  border: isDragOver ? "2px dashed var(--blue)" : "2px dashed rgba(255,255,255,0.12)",
+                  borderRadius: 10, padding: "20px 16px", textAlign: "center", transition: "border 0.2s",
+                  background: isDragOver ? "rgba(59,130,246,0.06)" : "transparent", cursor: "pointer",
+                }}
+                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setIsDragOver(false); handleUploadFiles(e.dataTransfer.files); }}
+                onClick={() => document.getElementById("doc-file-input")?.click()}
+              >
+                <input
+                  id="doc-file-input"
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.txt,.md,.html,.htm"
+                  style={{ display: "none" }}
+                  onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
+                />
+                {docImporting ? (
+                  <div style={{ color: "var(--text3)", fontSize: ".85rem" }}>Parsing document...</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>📂</div>
+                    <div style={{ fontSize: ".85rem", color: "var(--text2)", fontWeight: 600 }}>
+                      Drop files here or click to browse
+                    </div>
+                    <div style={{ fontSize: ".75rem", color: "var(--text3)", marginTop: 4 }}>
+                      PDF, DOCX, TXT, MD, HTML — up to 5 files, 10MB each
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="repo-input-row">
+                <input
+                  type="url"
+                  className="repo-url-input"
+                  placeholder="https://example.com/article"
+                  value={docUrlInput}
+                  onChange={(e) => setDocUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleFetchUrl())}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost repo-import-btn"
+                  disabled={!docUrlInput.trim() || docImporting}
+                  onClick={handleFetchUrl}
+                >
+                  {docImporting ? "Fetching..." : "Fetch"}
+                </button>
+              </div>
+            )}
+
+            {docError && <div className="repo-error">{docError}</div>}
           </div>
 
           {/* Advanced toggle */}
