@@ -1,17 +1,23 @@
 {
   "name": "ai-assist",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI Think Tank — multi-model adversarial debate engine",
+  "main": "server.js",
   "scripts": {
     "dev": "tsx server.ts",
+    "build": "npm run build-frontend && npm run build-server",
     "build-frontend": "vite build",
+    "build-server": "tsc --outDir dist-server --module nodenext --moduleResolution nodenext --skipLibCheck server.ts engine/index.ts engine/agents.ts engine/fileparser.ts engine/github.ts engine/providers.ts engine/roundtable.ts engine/router.ts engine/sandbox.ts engine/search.ts engine/types.ts 2>/dev/null || tsc -p tsconfig.server.json",
+    "start": "node dist-server/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
     "@tavily/core": "^0.7.6",
