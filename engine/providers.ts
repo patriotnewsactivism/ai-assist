@@ -40,12 +40,18 @@ function buildOpenAIClient(provider: Provider): OpenAI {
   });
 }
 
+function getHttpStatus(err: unknown): number | undefined {
+  return (err as any)?.status ?? (err as any)?.statusCode;
+}
+
 function is429(err: unknown): boolean {
-  return (
-    (err as any)?.status === 429 ||
-    (err as any)?.statusCode === 429 ||
-    String((err as any)?.message).includes("429")
-  );
+  const s = getHttpStatus(err);
+  return s === 429 || (!s && String((err as any)?.message).includes("429"));
+}
+
+function isAuthError(err: unknown): boolean {
+  const s = getHttpStatus(err);
+  return s === 401 || s === 403;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -103,7 +109,8 @@ export async function callModel(
       };
     } catch (err) {
       lastErr = err;
-      if (!is429(err)) throw err; // non-rate-limit errors propagate immediately
+      if (isAuthError(err)) throw err; // auth failures won't recover — propagate immediately
+      if (!is429(err)) throw err;      // only retry on rate limits
     }
   }
 
