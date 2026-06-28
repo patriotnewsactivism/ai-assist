@@ -1,5 +1,5 @@
 export { routeInput } from "./router.js";
-export { runRoundtable, DEFAULT_AGENT_MODELS } from "./roundtable.js";
+export { runRoundtable, DEFAULT_AGENT_MODELS, FALLBACK_AGENT_MODELS } from "./roundtable.js";
 export { getAvailableProviders } from "./providers.js";
 export { isTavilyEnabled } from "./search.js";
 export { AGENT_META } from "./agents.js";
