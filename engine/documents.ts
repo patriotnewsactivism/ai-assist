@@ -1,9 +1,10 @@
 import { load } from "cheerio";
 import mammoth from "mammoth";
+import { createRequire } from "module";
 
-// tsx handles CJS→ESM interop for pdf-parse; import as default
-// @ts-expect-error — pdf-parse has no bundled types, CJS default export
-import pdfParse from "pdf-parse";
+// pdf-parse v1.1.1 is CJS — load via createRequire so it works in ESM/tsx
+const _require = createRequire(import.meta.url);
+const pdfParse  = _require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
 
 const MAX_CHARS = 150_000;
 
@@ -13,7 +14,7 @@ function cap(text: string): string {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<string> {
-  const data = await (pdfParse as (buf: Buffer) => Promise<{ text: string }>)(buffer);
+  const data = await pdfParse(buffer);
   return cap(data.text);
 }
 
@@ -35,7 +36,7 @@ export function extractHtml(html: string): string {
 
 export async function fetchUrl(url: string): Promise<{ text: string; title: string | undefined; contentType: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout    = setTimeout(() => controller.abort(), 15_000);
 
   try {
     const res = await fetch(url, {
@@ -48,7 +49,7 @@ export async function fetchUrl(url: string): Promise<{ text: string; title: stri
     const contentType = res.headers.get("content-type") ?? "";
 
     if (contentType.includes("application/pdf")) {
-      const buf = Buffer.from(await res.arrayBuffer());
+      const buf  = Buffer.from(await res.arrayBuffer());
       const text = await extractPdf(buf);
       return { text, title: undefined, contentType: "pdf" };
     }
@@ -56,9 +57,9 @@ export async function fetchUrl(url: string): Promise<{ text: string; title: stri
     const raw = await res.text();
 
     if (contentType.includes("text/html") || raw.trimStart().startsWith("<")) {
-      const $ = load(raw);
+      const $     = load(raw);
       const title = $("title").first().text().trim() || undefined;
-      const text = extractHtml(raw);
+      const text  = extractHtml(raw);
       return { text, title, contentType: "html" };
     }
 
