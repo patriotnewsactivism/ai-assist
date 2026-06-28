@@ -1,6 +1,6 @@
 export type Provider = "deepseek" | "openai" | "anthropic" | "gemini";
 export type Mode = "RESEARCH_MODE" | "DATA_MODE" | "CODE_MODE";
-export type AgentRole = "researcher" | "adversary" | "expert" | "synthesizer" | "judge";
+export type AgentRole = "researcher" | "steelman" | "adversary" | "expert" | "synthesizer" | "judge";
 
 export interface AgentConfig {
   role: AgentRole;
@@ -14,6 +14,25 @@ export interface SearchResult {
   content: string;
 }
 
+// Cross-agent memory: persists insights across ALL rounds so agents build
+// on accumulated knowledge rather than starting fresh each iteration.
+export interface AgentMemory {
+  role: AgentRole;
+  round: number;
+  keyInsights: string[];     // bullet points worth carrying forward
+  openQuestions: string[];   // unresolved issues flagged by this agent
+  positionSummary: string;   // one-paragraph stance this agent took
+}
+
+export interface RoundMemory {
+  round: number;
+  agentMemories: AgentMemory[];
+  consensusPoints: string[];   // things all agents agreed on this round
+  contestedPoints: string[];   // things agents disagreed on this round
+  judgeScore: number;
+  judgeWeaknesses: string[];
+}
+
 export interface AgentTurn {
   role: AgentRole;
   name: string;
@@ -24,6 +43,7 @@ export interface AgentTurn {
   reasoning?: string;
   searchResults?: SearchResult[];
   round: number;
+  memory?: AgentMemory;      // extracted memory from this turn
 }
 
 export interface JudgeVerdict {
@@ -39,6 +59,7 @@ export interface RoundResult {
   agents: AgentTurn[];
   synthesis: string;
   verdict: JudgeVerdict;
+  memory: RoundMemory;       // full memory snapshot for this round
 }
 
 export interface RouterOutput {
@@ -46,6 +67,7 @@ export interface RouterOutput {
   confidence_score: number;
   extracted_goal: string;
   suggested_domain: string;
+  reasoning: string;         // AI router explains WHY it chose this mode
 }
 
 export interface RepoFile {
@@ -60,6 +82,7 @@ export interface ThinkTankConfig {
   customContext?: string;
   qualityThreshold?: number;
   expertDomain?: string;
+  enableSteelman?: boolean;  // opt-in steelman agent
 }
 
 export interface SandboxBuild {
@@ -76,12 +99,15 @@ export interface SandboxRunResult {
   summary: string;
 }
 
+export type SandboxResultEvent = SandboxRunResult & { round: number };
+
 export type SSEEventPayload =
   | { type: "routing"; data: RouterOutput }
   | { type: "agent_thinking"; data: { role: AgentRole; name: string; emoji: string; round: number } }
   | { type: "agent_complete"; data: AgentTurn }
   | { type: "sandbox_result"; data: { round: number } & SandboxRunResult }
   | { type: "round_complete"; data: RoundResult }
+  | { type: "memory_update"; data: { round: number; memory: RoundMemory } }
   | { type: "complete"; data: { finalOutput: string; totalRounds: number } }
   | { type: "error"; data: { message: string } };
 
