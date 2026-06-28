@@ -1,4 +1,4 @@
-export type Provider = "deepseek" | "openai" | "anthropic" | "gemini";
+export type Provider = "deepseek" | "openai" | "anthropic" | "gemini" | "groq";
 export type Mode = "RESEARCH_MODE" | "DATA_MODE" | "CODE_MODE";
 export type AgentRole = "researcher" | "steelman" | "adversary" | "expert" | "synthesizer" | "judge";
 

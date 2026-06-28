@@ -9,12 +9,12 @@ interface Props {
 }
 
 const DEFAULT_MODELS: Record<AgentRole, { provider: Provider; modelId: string }> = {
-  researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
-  steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
-  adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
-  expert:      { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
-  judge:       { provider: "anthropic", modelId: "claude-sonnet-4-5" },
+  researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
+  steelman:    { provider: "deepseek", modelId: "deepseek-chat" },
+  adversary:   { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
+  expert:      { provider: "deepseek", modelId: "deepseek-chat" },
+  synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
+  judge:       { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
 };
 
 const PRESETS = [
@@ -29,38 +29,38 @@ type ModelPack = "fast" | "deep" | "mixed";
 const PACKS: Record<ModelPack, { label: string; desc: string; models: (avail: Provider[]) => Record<AgentRole, { provider: Provider; modelId: string }> }> = {
   fast: {
     label: "⚡ Fast",
-    desc: "All Gemini Flash — quickest results",
-    models: () => ({
-      researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-      steelman:    { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-      adversary:   { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-      expert:      { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-      synthesizer: { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-      judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+    desc: "DeepSeek + Groq Llama — cheapest & fastest",
+    models: (avail) => ({
+      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
+      steelman:    avail.includes("groq") ? { provider: "groq", modelId: "llama-3.1-8b-instant" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "llama-3.1-8b-instant" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      expert:      { provider: "deepseek", modelId: "deepseek-chat" },
+      synthesizer: { provider: "deepseek", modelId: "deepseek-chat" },
+      judge:       avail.includes("groq") ? { provider: "groq", modelId: "llama-3.1-8b-instant" } : { provider: "deepseek", modelId: "deepseek-chat" },
     }),
   },
   deep: {
     label: "🧠 Deep",
-    desc: "Gemini 2.5 Flash for all reasoning roles",
-    models: () => ({
-      researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
-      steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
-      adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
-      expert:      { provider: "gemini",    modelId: "gemini-2.5-flash" },
-      synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
-      judge:       { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+    desc: "DeepSeek R1 + Groq 70B — strong reasoning",
+    models: (avail) => ({
+      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
+      steelman:    { provider: "deepseek", modelId: "deepseek-reasoner" },
+      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      expert:      { provider: "deepseek", modelId: "deepseek-reasoner" },
+      synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
+      judge:       avail.includes("groq") ? { provider: "groq", modelId: "deepseek-r1-distill-llama-70b" } : { provider: "deepseek", modelId: "deepseek-reasoner" },
     }),
   },
   mixed: {
     label: "🌐 Multi-Model",
-    desc: "Gemini + Claude — best model per role",
+    desc: "Best model per role across all providers",
     models: (avail) => ({
-      researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
-      steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
-      adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
-      expert:      avail.includes("anthropic") ? { provider: "anthropic", modelId: "claude-sonnet-4-5" } : { provider: "gemini", modelId: "gemini-2.5-flash" },
-      synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
-      judge:       avail.includes("anthropic") ? { provider: "anthropic", modelId: "claude-sonnet-4-5" } : { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
+      steelman:    avail.includes("groq")     ? { provider: "groq",     modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      adversary:   avail.includes("groq")     ? { provider: "groq",     modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      expert:      avail.includes("anthropic")? { provider: "anthropic", modelId: "claude-sonnet-4-5" }       : { provider: "deepseek", modelId: "deepseek-chat" },
+      synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
+      judge:       avail.includes("anthropic")? { provider: "anthropic", modelId: "claude-sonnet-4-5" }       : { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
     }),
   },
 };

@@ -51,9 +51,9 @@ function regexClassify(userInput: string): RouterOutput {
 
 // Provider + model candidates tried in order for routing
 const ROUTER_CANDIDATES: Array<{ provider: Provider; modelId: string }> = [
-  { provider: "gemini",   modelId: "gemini-2.0-flash-lite" },
   { provider: "deepseek", modelId: "deepseek-chat" },
-  { provider: "gemini",   modelId: "gemini-2.5-flash" },
+  { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
+  { provider: "gemini",   modelId: "gemini-2.0-flash-lite" },
   { provider: "anthropic",modelId: "claude-sonnet-4-5" },
 ];
 

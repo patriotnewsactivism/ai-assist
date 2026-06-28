@@ -1,4 +1,4 @@
-export type Provider = "deepseek" | "openai" | "anthropic" | "gemini";
+export type Provider = "deepseek" | "openai" | "anthropic" | "gemini" | "groq";
 export type Mode = "RESEARCH_MODE" | "DATA_MODE" | "CODE_MODE";
 export type AgentRole = "researcher" | "steelman" | "adversary" | "expert" | "synthesizer" | "judge";
 
@@ -105,22 +105,27 @@ export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "
 
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
   deepseek: [
-    { modelId: "deepseek-chat", label: "DeepSeek V3" },
+    { modelId: "deepseek-chat",     label: "DeepSeek V3" },
     { modelId: "deepseek-reasoner", label: "DeepSeek R1 (Reasoning)" },
   ],
+  groq: [
+    { modelId: "llama-3.3-70b-versatile",      label: "Llama 3.3 70B (Fast)" },
+    { modelId: "llama-3.1-8b-instant",         label: "Llama 3.1 8B (Instant)" },
+    { modelId: "mixtral-8x7b-32768",           label: "Mixtral 8x7B" },
+    { modelId: "deepseek-r1-distill-llama-70b",label: "DeepSeek R1 70B (Groq)" },
+  ],
   openai: [
-    { modelId: "gpt-4o", label: "GPT-4o" },
-    { modelId: "gpt-4o-mini", label: "GPT-4o Mini" },
-    { modelId: "o1-mini", label: "o1 Mini (Reasoning)" },
+    { modelId: "gpt-4o",     label: "GPT-4o" },
+    { modelId: "gpt-4o-mini",label: "GPT-4o Mini" },
   ],
   anthropic: [
-    { modelId: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-    { modelId: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+    { modelId: "claude-sonnet-4-5",       label: "Claude Sonnet 4.5" },
+    { modelId: "claude-haiku-4-5-20251001",label: "Claude Haiku 4.5" },
   ],
   gemini: [
-    { modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { modelId: "gemini-2.5-flash",      label: "Gemini 2.5 Flash" },
     { modelId: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-    { modelId: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+    { modelId: "gemini-2.0-flash",      label: "Gemini 2.0 Flash" },
   ],
 };
 

@@ -176,9 +176,10 @@ Output ONLY the JSON verdict.`;
 
   // Fallback chain tried in order when primary is rate-limited or out of credits
   const AGENT_FALLBACKS: Array<{ provider: import("./types.js").Provider; modelId: string; envKey: string }> = [
-    { provider: "gemini",   modelId: "gemini-2.5-flash",    envKey: "GEMINI_API_KEY" },
-    { provider: "deepseek", modelId: "deepseek-chat",       envKey: "DEEPSEEK_API_KEY" },
-    { provider: "anthropic",modelId: "claude-sonnet-4-5",   envKey: "ANTHROPIC_API_KEY" },
+    { provider: "deepseek", modelId: "deepseek-chat",            envKey: "DEEPSEEK_API_KEY" },
+    { provider: "groq",     modelId: "llama-3.3-70b-versatile",  envKey: "GROQ_API_KEY" },
+    { provider: "gemini",   modelId: "gemini-2.5-flash",         envKey: "GEMINI_API_KEY" },
+    { provider: "anthropic",modelId: "claude-sonnet-4-5",        envKey: "ANTHROPIC_API_KEY" },
   ];
 
   let callResult: { content: string; reasoning?: string };
@@ -389,14 +390,14 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: spread across Gemini + DeepSeek to avoid hitting one provider's RPM limit
+// DEFAULT: DeepSeek-heavy for cost; Groq for speed-critical roles; Gemini as overflow
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "gemini",   modelId: "gemini-2.0-flash-lite" },
+  researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
   steelman:    { provider: "deepseek", modelId: "deepseek-chat" },
-  adversary:   { provider: "deepseek", modelId: "deepseek-chat" },
-  expert:      { provider: "gemini",   modelId: "gemini-2.5-flash" },
+  adversary:   { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
+  expert:      { provider: "deepseek", modelId: "deepseek-chat" },
   synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
-  judge:       { provider: "deepseek", modelId: "deepseek-chat" },
+  judge:       { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
 };
 
 // FALLBACK: all-Gemini when ANTHROPIC_API_KEY is not set
