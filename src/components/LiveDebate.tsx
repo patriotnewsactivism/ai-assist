@@ -11,6 +11,7 @@ interface Props {
 
 const AGENT_NAMES: Record<AgentRole, string> = {
   researcher:  "Scout",
+  steelman:    "Steelman",
   adversary:   "Adversary",
   expert:      "Expert",
   synthesizer: "Synth",
@@ -19,6 +20,7 @@ const AGENT_NAMES: Record<AgentRole, string> = {
 
 const AGENT_EMOJIS: Record<AgentRole, string> = {
   researcher:  "🔍",
+  steelman:    "🛡️",
   adversary:   "😈",
   expert:      "🎓",
   synthesizer: "🧠",
@@ -169,7 +171,6 @@ export default function LiveDebate({ state }: Props) {
           );
         })}
 
-        {/* Sandbox building placeholder — shows when synthesizer just completed but sandbox hasn't reported yet */}
         {state.turns[state.turns.length - 1]?.role === "synthesizer" &&
           !state.sandboxResults.find((s) => s.round === state.turns[state.turns.length - 1]?.round) &&
           state.thinking === null && state.status === "running" && (
@@ -184,7 +185,6 @@ export default function LiveDebate({ state }: Props) {
           </div>
         )}
 
-        {/* Thinking placeholder */}
         {state.thinking && (
           <div
             className="agent-card"
