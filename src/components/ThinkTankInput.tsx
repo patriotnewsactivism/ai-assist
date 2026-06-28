@@ -137,7 +137,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
       customContext,
       expertDomain,
       agentModels,
-      ...(repoUrl.trim() ? { repoUrl: repoUrl.trim() } : {}),
+      ...(repoUrl.trim() ? { repoUrl: repoUrl.trim(), ...(repoToken.trim() ? { repoToken: repoToken.trim() } : {}) } : {}),
     });
   };
 

@@ -42,6 +42,7 @@ export interface SessionConfig {
   expertDomain: string;
   agentModels: Record<AgentRole, { provider: Provider; modelId: string }>;
   repoUrl?: string;
+  repoToken?: string;
 }
 
 const EMPTY_STATE: AppState = {
@@ -82,6 +83,7 @@ export default function App() {
           qualityThreshold: cfg.qualityThreshold,
           expertDomain: cfg.expertDomain || undefined,
           repoUrl: cfg.repoUrl || undefined,
+          repoToken: cfg.repoToken || undefined,
         }),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);

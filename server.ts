@@ -90,7 +90,7 @@ app.post("/api/repo/push", async (req, res) => {
 
 // POST /api/debate — start a think tank session, returns sessionId immediately
 app.post("/api/debate", (req, res) => {
-  const { input, maxRounds = 3, agentModels, customContext, qualityThreshold, expertDomain, repoUrl } = req.body as {
+  const { input, maxRounds = 3, agentModels, customContext, qualityThreshold, expertDomain, repoUrl, repoToken } = req.body as {
     input: string;
     maxRounds?: number;
     agentModels?: Record<AgentRole, { provider: Provider; modelId: string }>;
@@ -98,6 +98,7 @@ app.post("/api/debate", (req, res) => {
     qualityThreshold?: number;
     expertDomain?: string;
     repoUrl?: string;
+    repoToken?: string;
   };
 
   if (!input?.trim()) {
@@ -114,7 +115,7 @@ app.post("/api/debate", (req, res) => {
     try {
       let fullContext = customContext || "";
       if (repoUrl) {
-        const token = (process.env["GITHUB_TOKEN"] ?? "").trim() || undefined;
+        const token = repoToken || (process.env["GITHUB_TOKEN"] ?? "").trim() || undefined;
         const files = await fetchRepoFiles(repoUrl, token);
         const repoCtx = buildRepoContext(files);
         fullContext = fullContext ? `${fullContext}\n\n${repoCtx}` : repoCtx;
