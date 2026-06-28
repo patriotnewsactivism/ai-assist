@@ -273,7 +273,15 @@ app.get("/api/debate/stream/:sessionId", (req, res) => {
 
   const onEvent = (event: SSEEventPayload) => res.write(`data: ${JSON.stringify(event)}\n\n`);
   const onDone  = () => { res.end(); cleanup(); };
-  const cleanup = () => { emitter.off("event", onEvent); emitter.off("done", onDone); };
+
+  // Heartbeat every 15s — keeps Railway/proxies from dropping idle SSE connections
+  const heartbeat = setInterval(() => res.write(": ping\n\n"), 15_000);
+
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    emitter.off("event", onEvent);
+    emitter.off("done", onDone);
+  };
 
   emitter.on("event", onEvent);
   emitter.once("done", onDone);

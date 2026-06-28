@@ -80,7 +80,7 @@ export async function callModel(
   provider: Provider,
   modelId: string,
   messages: Message[],
-  { retries = 3, baseDelayMs = 1000 }: { retries?: number; baseDelayMs?: number } = {}
+  { retries = 2, baseDelayMs = 500 }: { retries?: number; baseDelayMs?: number } = {}
 ): Promise<{ content: string; reasoning?: string }> {
   let lastErr: unknown;
 
