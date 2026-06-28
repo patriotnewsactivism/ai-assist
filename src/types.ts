@@ -1,11 +1,19 @@
 export type Provider = "deepseek" | "openai" | "anthropic" | "gemini";
 export type Mode = "RESEARCH_MODE" | "DATA_MODE" | "CODE_MODE";
-export type AgentRole = "researcher" | "adversary" | "expert" | "synthesizer" | "judge";
+export type AgentRole = "researcher" | "steelman" | "adversary" | "expert" | "synthesizer" | "judge";
 
 export interface SearchResult {
   title: string;
   url: string;
   content: string;
+}
+
+export interface AgentMemory {
+  role: AgentRole;
+  round: number;
+  keyInsights: string[];
+  openQuestions: string[];
+  positionSummary: string;
 }
 
 export interface AgentTurn {
@@ -18,6 +26,7 @@ export interface AgentTurn {
   reasoning?: string;
   searchResults?: SearchResult[];
   round: number;
+  memory?: AgentMemory;
 }
 
 export interface JudgeVerdict {
@@ -28,11 +37,21 @@ export interface JudgeVerdict {
   weaknesses: string[];
 }
 
+export interface RoundMemory {
+  round: number;
+  agentMemories: AgentMemory[];
+  consensusPoints: string[];
+  contestedPoints: string[];
+  judgeScore: number;
+  judgeWeaknesses: string[];
+}
+
 export interface RoundResult {
   round: number;
   agents: AgentTurn[];
   synthesis: string;
   verdict: JudgeVerdict;
+  memory?: RoundMemory;
 }
 
 export interface RouterOutput {
@@ -40,6 +59,7 @@ export interface RouterOutput {
   confidence_score: number;
   extracted_goal: string;
   suggested_domain: string;
+  reasoning?: string;
 }
 
 export interface SandboxBuild {
@@ -64,6 +84,7 @@ export type SSEEventPayload =
   | { type: "agent_complete"; data: AgentTurn }
   | { type: "sandbox_result"; data: SandboxResultEvent }
   | { type: "round_complete"; data: RoundResult }
+  | { type: "memory_update"; data: { round: number; memory: RoundMemory } }
   | { type: "complete"; data: { finalOutput: string; totalRounds: number } }
   | { type: "error"; data: { message: string } };
 
@@ -80,7 +101,7 @@ export interface ServerConfig {
   defaultModels: Record<AgentRole, { provider: Provider; modelId: string }>;
 }
 
-export const ROLE_ORDER: AgentRole[] = ["researcher", "adversary", "expert", "synthesizer", "judge"];
+export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "expert", "synthesizer", "judge"];
 
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
   deepseek: [
@@ -93,19 +114,21 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
     { modelId: "o1-mini", label: "o1 Mini (Reasoning)" },
   ],
   anthropic: [
-    { modelId: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+    { modelId: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
     { modelId: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
   ],
   gemini: [
+    { modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { modelId: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
     { modelId: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-    { modelId: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
   ],
 };
 
 export const ROLE_COLORS: Record<AgentRole, string> = {
-  researcher: "#3b82f6",
-  adversary: "#ef4444",
-  expert: "#8b5cf6",
-  synthesizer: "#10b981",
-  judge: "#f59e0b",
+  researcher: "#3b82f6",   // blue
+  steelman:   "#6366f1",   // indigo/purple — defender
+  adversary:  "#ef4444",   // red
+  expert:     "#8b5cf6",   // violet
+  synthesizer:"#10b981",   // emerald
+  judge:      "#f59e0b",   // amber
 };
