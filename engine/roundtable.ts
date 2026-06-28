@@ -350,11 +350,11 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: Gemini Researcher+Adversary+Synthesizer, Claude Expert+Judge
+// DEFAULT: Gemini for research/synthesis (fast/cheap), Claude for reasoning roles
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
-  steelman:    { provider: "gemini",    modelId: "gemini-2.5-flash" },
-  adversary:   { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  steelman:    { provider: "anthropic", modelId: "claude-sonnet-4-5" },
+  adversary:   { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   expert:      { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   synthesizer: { provider: "gemini",    modelId: "gemini-2.5-flash" },
   judge:       { provider: "anthropic", modelId: "claude-sonnet-4-5" },
