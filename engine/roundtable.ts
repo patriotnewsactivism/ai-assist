@@ -1,4 +1,4 @@
-import { callModel } from "./providers.js";
+import { callModel, isOutOfCredits } from "./providers.js";
 import { webSearch, buildSearchQueries } from "./search.js";
 import { AGENT_META, getSystemPrompt, buildMemoryBlock, extractMemory } from "./agents.js";
 import { parseFilesFromOutput } from "./fileparser.js";
@@ -174,17 +174,32 @@ Output ONLY the JSON verdict.`;
     { role: "user"   as const, content: userContent },
   ];
 
-  // Try primary model; on rate-limit fall back to claude-sonnet-4-5 if available and different
+  // Try primary model; on rate-limit or out-of-credits, cross-fallback to the other provider
   let callResult: { content: string; reasoning?: string };
   try {
     callResult = await callModel(provider, modelId, messages);
   } catch (primaryErr) {
     const status = (primaryErr as any)?.status ?? (primaryErr as any)?.statusCode;
     const isRateLimit = status === 429 || String((primaryErr as any)?.message).includes("429");
-    const anthropicKey = (process.env["ANTHROPIC_API_KEY"] || "").trim();
-    if (isRateLimit && anthropicKey && provider !== "anthropic") {
-      console.warn(`[Agent:${role}] Primary ${provider}/${modelId} rate-limited — falling back to claude-sonnet-4-5`);
-      callResult = await callModel("anthropic", "claude-sonnet-4-5", messages);
+    const noCredits = isOutOfCredits(primaryErr);
+
+    if (isRateLimit || noCredits) {
+      // Anthropic primary → try Gemini; Gemini/other primary → try Anthropic
+      const [fbProvider, fbModel] = provider === "anthropic"
+        ? ["gemini" as const,    "gemini-2.5-flash"]
+        : ["anthropic" as const, "claude-sonnet-4-5"];
+
+      const fbKey = fbProvider === "anthropic"
+        ? (process.env["ANTHROPIC_API_KEY"] || "").trim()
+        : (process.env["GEMINI_API_KEY"] || "").trim();
+
+      if (fbKey) {
+        const reason = noCredits ? "out of credits" : "rate-limited";
+        console.warn(`[Agent:${role}] Primary ${provider}/${modelId} ${reason} — falling back to ${fbProvider}/${fbModel}`);
+        callResult = await callModel(fbProvider, fbModel, messages);
+      } else {
+        throw primaryErr;
+      }
     } else {
       throw primaryErr;
     }
@@ -368,14 +383,14 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: Claude for all reasoning/generation; Gemini only for synthesizer (long output)
+// DEFAULT: Gemini primary (free tier); auto-falls back to Anthropic if rate-limited
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  steelman:    { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  adversary:   { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  expert:      { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  synthesizer: { provider: "anthropic", modelId: "claude-sonnet-4-5" },
-  judge:       { provider: "anthropic", modelId: "claude-sonnet-4-5" },
+  researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  steelman:    { provider: "gemini", modelId: "gemini-2.5-flash" },
+  adversary:   { provider: "gemini", modelId: "gemini-2.5-flash" },
+  expert:      { provider: "gemini", modelId: "gemini-2.5-flash" },
+  synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
+  judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
 };
 
 // FALLBACK: all-Gemini when ANTHROPIC_API_KEY is not set

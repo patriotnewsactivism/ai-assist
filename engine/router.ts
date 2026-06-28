@@ -1,4 +1,4 @@
-import { callModel, getAvailableProviders } from "./providers.js";
+import { callModel, getAvailableProviders, isOutOfCredits } from "./providers.js";
 import type { Provider, RouterOutput } from "./types.js";
 
 const ROUTER_SYSTEM_PROMPT = `You are an expert task classifier for an AI Think Tank system.
@@ -51,8 +51,9 @@ function regexClassify(userInput: string): RouterOutput {
 
 // Provider + model candidates tried in order for routing
 const ROUTER_CANDIDATES: Array<{ provider: Provider; modelId: string }> = [
-  { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
+  { provider: "gemini",    modelId: "gemini-2.5-flash" },
+  { provider: "anthropic", modelId: "claude-sonnet-4-5" },
   { provider: "deepseek",  modelId: "deepseek-chat" },
   { provider: "openai",    modelId: "gpt-4o-mini" },
 ];
@@ -83,7 +84,9 @@ export async function routeInput(userInput: string): Promise<RouterOutput> {
       const { content } = await callModel(provider, modelId, messages, { retries: 2, baseDelayMs: 500 });
       return parseRouterResponse(content, userInput);
     } catch (err) {
-      console.warn(`[Router] ${provider}/${modelId} failed, trying next candidate:`, (err as any)?.status ?? err);
+      const status = (err as any)?.status ?? (err as any)?.statusCode;
+      const reason = isOutOfCredits(err) ? "out of credits" : status ?? String(err).slice(0, 60);
+      console.warn(`[Router] ${provider}/${modelId} failed (${reason}), trying next candidate`);
     }
   }
 

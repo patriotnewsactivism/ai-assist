@@ -54,6 +54,14 @@ function isAuthError(err: unknown): boolean {
   return s === 401 || s === 403;
 }
 
+// 400 "credit balance too low" — provider is configured but has no funds; don't retry
+export function isOutOfCredits(err: unknown): boolean {
+  const s = getHttpStatus(err);
+  if (s !== 400) return false;
+  const body = String((err as any)?.message ?? (err as any)?.error?.message ?? "");
+  return /credit balance|insufficient|billing|quota exceeded/i.test(body);
+}
+
 async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -109,8 +117,9 @@ export async function callModel(
       };
     } catch (err) {
       lastErr = err;
-      if (isAuthError(err)) throw err; // auth failures won't recover — propagate immediately
-      if (!is429(err)) throw err;      // only retry on rate limits
+      if (isAuthError(err)) throw err;   // 401/403 — won't recover
+      if (isOutOfCredits(err)) throw err; // no credits — won't recover with retries
+      if (!is429(err)) throw err;         // only retry on rate limits
     }
   }
 
