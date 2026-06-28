@@ -40,12 +40,19 @@ async function runAgent(
 ): Promise<AgentTurn> {
   const { provider, modelId } = config.agentModels[role];
   const { name, emoji } = AGENT_META[role];
+
+  // Groq free tier has 12k TPM — cap document context so input fits alongside 2k output
+  const ctxCharLimit = provider === "groq" ? 8_000 : undefined;
+  const trimmedContext = ctxCharLimit && config.customContext && config.customContext.length > ctxCharLimit
+    ? config.customContext.slice(0, ctxCharLimit) + "\n\n[...context trimmed for token limit]"
+    : config.customContext;
+
   const systemPrompt = getSystemPrompt(
     role,
     routing.mode,
     routing.extracted_goal,
     routing.suggested_domain,
-    config.customContext,
+    trimmedContext,
     config.expertDomain
   );
 

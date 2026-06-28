@@ -8,6 +8,7 @@ interface Message {
 }
 
 // Token limits per model — Gemini 2.5 Flash supports up to 65k output
+// Groq free tier: 12,000 TPM total (input + output). Keep output low so input fits.
 const MAX_TOKENS: Record<string, number> = {
   "gemini-2.5-flash": 16384,
   "gemini-2.0-flash-lite": 8192,
@@ -16,10 +17,10 @@ const MAX_TOKENS: Record<string, number> = {
   "gpt-4o-mini": 8192,
   "claude-opus-4-5": 16384,
   "claude-sonnet-4-5": 16384,
-  "llama-3.3-70b-versatile": 8192,
-  "llama-3.1-8b-instant": 8192,
-  "mixtral-8x7b-32768": 8192,
-  "deepseek-r1-distill-llama-70b": 8192,
+  "llama-3.3-70b-versatile": 2048,   // Groq free tier 12k TPM — leave room for input
+  "llama-3.1-8b-instant": 2048,
+  "mixtral-8x7b-32768": 2048,
+  "deepseek-r1-distill-llama-70b": 2048,
 };
 
 function getMaxTokens(modelId: string): number {
