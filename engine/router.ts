@@ -52,7 +52,7 @@ function regexClassify(userInput: string): RouterOutput {
 // Provider + model candidates tried in order for routing
 const ROUTER_CANDIDATES: Array<{ provider: Provider; modelId: string }> = [
   { provider: "gemini",    modelId: "gemini-2.0-flash-lite" },
-  { provider: "anthropic", modelId: "claude-haiku-4-5-20251001" },
+  { provider: "anthropic", modelId: "claude-haiku-4-5" },
   { provider: "deepseek",  modelId: "deepseek-chat" },
   { provider: "openai",    modelId: "gpt-4o-mini" },
 ];
