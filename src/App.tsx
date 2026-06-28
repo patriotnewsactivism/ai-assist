@@ -81,6 +81,7 @@ export default function App() {
           customContext: cfg.customContext || undefined,
           qualityThreshold: cfg.qualityThreshold,
           expertDomain: cfg.expertDomain || undefined,
+          repoUrl: cfg.repoUrl || undefined,
         }),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);

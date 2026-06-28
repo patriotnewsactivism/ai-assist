@@ -50,8 +50,7 @@ app.post("/api/repo/import", async (req, res) => {
   const effectiveToken = token || (process.env["GITHUB_TOKEN"] ?? "").trim() || undefined;
   try {
     const files = await fetchRepoFiles(repoUrl, effectiveToken);
-    const context = buildRepoContext(files);
-    res.json({ files: files.map((f) => ({ path: f.path, size: f.content.length })), context });
+    res.json({ files: files.map((f) => ({ path: f.path, size: f.content.length })) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Import failed";
     res.status(400).json({ error: message });
@@ -91,13 +90,14 @@ app.post("/api/repo/push", async (req, res) => {
 
 // POST /api/debate — start a think tank session, returns sessionId immediately
 app.post("/api/debate", (req, res) => {
-  const { input, maxRounds = 3, agentModels, customContext, qualityThreshold, expertDomain } = req.body as {
+  const { input, maxRounds = 3, agentModels, customContext, qualityThreshold, expertDomain, repoUrl } = req.body as {
     input: string;
     maxRounds?: number;
     agentModels?: Record<AgentRole, { provider: Provider; modelId: string }>;
     customContext?: string;
     qualityThreshold?: number;
     expertDomain?: string;
+    repoUrl?: string;
   };
 
   if (!input?.trim()) {
@@ -109,18 +109,25 @@ app.post("/api/debate", (req, res) => {
   emitter.setMaxListeners(20);
   sessionEmitters.set(sessionId, emitter);
 
-  const config: ThinkTankConfig = {
-    input: input.trim(),
-    maxRounds: Math.min(Math.max(1, maxRounds), 8),
-    agentModels: agentModels ?? DEFAULT_AGENT_MODELS,
-    ...(customContext ? { customContext } : {}),
-    ...(qualityThreshold !== undefined ? { qualityThreshold } : {}),
-    ...(expertDomain ? { expertDomain } : {}),
-  };
-
   // Run in background
   (async () => {
     try {
+      let fullContext = customContext || "";
+      if (repoUrl) {
+        const token = (process.env["GITHUB_TOKEN"] ?? "").trim() || undefined;
+        const files = await fetchRepoFiles(repoUrl, token);
+        const repoCtx = buildRepoContext(files);
+        fullContext = fullContext ? `${fullContext}\n\n${repoCtx}` : repoCtx;
+      }
+
+      const config: ThinkTankConfig = {
+        input: input.trim(),
+        maxRounds: Math.min(Math.max(1, maxRounds), 8),
+        agentModels: agentModels ?? DEFAULT_AGENT_MODELS,
+        ...(fullContext ? { customContext: fullContext } : {}),
+        ...(qualityThreshold !== undefined ? { qualityThreshold } : {}),
+        ...(expertDomain ? { expertDomain } : {}),
+      };
       const routing = await routeInput(config.input);
       emitter.emit("event", { type: "routing", data: routing } satisfies SSEEventPayload);
 

@@ -109,11 +109,9 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repoUrl: repoUrl.trim(), token: repoToken || undefined }),
       });
-      const data = await res.json() as { files?: RepoFileInfo[]; context?: string; error?: string };
+      const data = await res.json() as { files?: RepoFileInfo[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Import failed");
       setRepoFiles(data.files ?? []);
-      // Inject repo context into customContext
-      if (data.context) setCustomCtx(data.context);
     } catch (err) {
       setRepoError(err instanceof Error ? err.message : "Import failed");
     } finally {
