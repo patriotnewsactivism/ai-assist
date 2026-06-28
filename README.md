@@ -154,3 +154,5 @@ Compare and contrast React, Vue, and Svelte ecosystems with pros/cons for 2024
 ## License
 
 ISC
+
+<!-- redeploy trigger -->
