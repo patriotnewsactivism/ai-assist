@@ -397,14 +397,14 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: DeepSeek for research/analysis; Groq Llama 70B for reasoning/debate roles
+// DEFAULT: Gemini-first (2.5 Flash for reasoning, 2.0 Flash-Lite for speed)
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-  steelman:    { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
-  expert:      { provider: "deepseek", modelId: "deepseek-chat" },
-  synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
-  judge:       { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
+  researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  steelman:    { provider: "gemini", modelId: "gemini-2.5-flash" },
+  adversary:   { provider: "gemini", modelId: "gemini-2.5-flash" },
+  expert:      { provider: "gemini", modelId: "gemini-2.5-flash" },
+  synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
+  judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
 };
 
 // FALLBACK: all-Gemini when ANTHROPIC_API_KEY is not set
