@@ -406,7 +406,7 @@ export async function runRoundtable(
 //   - Researcher/Synthesizer -> Gemini (Google) for a fifth distinct voice
 // If any one provider's free quota is exhausted, the other three keep the debate running.
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "gemini",     modelId: "gemini-2.0-flash-lite" },
+  researcher:  { provider: "cohere",     modelId: "command-a-reasoning-08-2025" },
   steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
   adversary:   { provider: "groq",       modelId: "deepseek-r1-distill-llama-70b" },
   expert:      { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" },
