@@ -397,22 +397,29 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: Gemini-first (2.5 Flash for reasoning, 2.0 Flash-Lite for speed)
+// DEFAULT: genuinely mixed providers so agents actually reason differently instead
+// of one model role-playing six personas. Steelman (Meta/Llama) vs Adversary
+// (DeepSeek-R1-distill, a real chain-of-thought reasoning model) is the core
+// disagreement — two different architectures, not one model arguing with itself.
+// Researcher/Expert/Judge lean on Gemini (Google) for a third distinct voice.
+// If Gemini's free quota is exhausted, Groq-backed roles (steelman, adversary,
+// synthesizer) keep the debate running.
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-  steelman:    { provider: "gemini", modelId: "gemini-2.5-flash" },
-  adversary:   { provider: "gemini", modelId: "gemini-2.5-flash" },
+  steelman:    { provider: "groq",   modelId: "llama-3.3-70b-versatile" },
+  adversary:   { provider: "groq",   modelId: "deepseek-r1-distill-llama-70b" },
   expert:      { provider: "gemini", modelId: "gemini-2.5-flash" },
-  synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
+  synthesizer: { provider: "groq",   modelId: "llama-3.3-70b-versatile" },
   judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
 };
 
-// FALLBACK: all-Gemini when ANTHROPIC_API_KEY is not set
+// FALLBACK: all-Groq when Gemini is not set/unavailable — still gives two
+// distinct reasoning styles (Llama vs DeepSeek-R1-distill) instead of one model.
 export const FALLBACK_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-  steelman:    { provider: "gemini", modelId: "gemini-2.5-flash" },
-  adversary:   { provider: "gemini", modelId: "gemini-2.5-flash" },
-  expert:      { provider: "gemini", modelId: "gemini-2.5-flash" },
-  synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
-  judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  researcher:  { provider: "groq", modelId: "llama-3.3-70b-versatile" },
+  steelman:    { provider: "groq", modelId: "llama-3.3-70b-versatile" },
+  adversary:   { provider: "groq", modelId: "deepseek-r1-distill-llama-70b" },
+  expert:      { provider: "groq", modelId: "deepseek-r1-distill-llama-70b" },
+  synthesizer: { provider: "groq", modelId: "llama-3.3-70b-versatile" },
+  judge:       { provider: "groq", modelId: "llama-3.3-70b-versatile" },
 };
