@@ -21,6 +21,8 @@ const MAX_TOKENS: Record<string, number> = {
   "llama-3.1-8b-instant": 2048,
   "mixtral-8x7b-32768": 2048,
   "deepseek-r1-distill-llama-70b": 2048,
+  "nvidia/nemotron-3-super-120b-a12b:free": 8192, // OpenRouter free tier
+  "openai/gpt-oss-120b:free": 8192,                // OpenRouter free tier
 };
 
 function getMaxTokens(modelId: string): number {
@@ -44,6 +46,12 @@ function buildOpenAIClient(provider: Provider): OpenAI {
     return new OpenAI({
       baseURL: "https://api.groq.com/openai/v1",
       apiKey: (process.env["GROQ_API_KEY"] || "").trim(),
+    });
+  }
+  if (provider === "openrouter") {
+    return new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: (process.env["OPENROUTER_API_KEY"] || "").trim(),
     });
   }
   return new OpenAI({
@@ -139,10 +147,11 @@ export async function callModel(
 
 export function getAvailableProviders(): Provider[] {
   const available: Provider[] = [];
-  if ((process.env["GEMINI_API_KEY"]    || "").trim()) available.push("gemini");
-  if ((process.env["DEEPSEEK_API_KEY"]  || "").trim()) available.push("deepseek");
-  if ((process.env["GROQ_API_KEY"]      || "").trim()) available.push("groq");
-  if ((process.env["ANTHROPIC_API_KEY"] || "").trim()) available.push("anthropic");
-  if ((process.env["OPENAI_API_KEY"]    || "").trim()) available.push("openai");
+  if ((process.env["GEMINI_API_KEY"]     || "").trim()) available.push("gemini");
+  if ((process.env["DEEPSEEK_API_KEY"]   || "").trim()) available.push("deepseek");
+  if ((process.env["GROQ_API_KEY"]       || "").trim()) available.push("groq");
+  if ((process.env["ANTHROPIC_API_KEY"]  || "").trim()) available.push("anthropic");
+  if ((process.env["OPENAI_API_KEY"]     || "").trim()) available.push("openai");
+  if ((process.env["OPENROUTER_API_KEY"] || "").trim()) available.push("openrouter");
   return available;
 }
