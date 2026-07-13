@@ -23,6 +23,7 @@ const MAX_TOKENS: Record<string, number> = {
   "deepseek-r1-distill-llama-70b": 2048,
   "nvidia/nemotron-3-super-120b-a12b:free": 8192, // OpenRouter free tier
   "openai/gpt-oss-120b:free": 8192,                // OpenRouter free tier
+  "command-a-reasoning-08-2025": 8192,              // Cohere's dedicated reasoning model
 };
 
 function getMaxTokens(modelId: string): number {
@@ -52,6 +53,12 @@ function buildOpenAIClient(provider: Provider): OpenAI {
     return new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
       apiKey: (process.env["OPENROUTER_API_KEY"] || "").trim(),
+    });
+  }
+  if (provider === "cohere") {
+    return new OpenAI({
+      baseURL: "https://api.cohere.ai/compatibility/v1",
+      apiKey: (process.env["COHERE_API_KEY"] || "").trim(),
     });
   }
   return new OpenAI({
@@ -153,5 +160,6 @@ export function getAvailableProviders(): Provider[] {
   if ((process.env["ANTHROPIC_API_KEY"]  || "").trim()) available.push("anthropic");
   if ((process.env["OPENAI_API_KEY"]     || "").trim()) available.push("openai");
   if ((process.env["OPENROUTER_API_KEY"] || "").trim()) available.push("openrouter");
+  if ((process.env["COHERE_API_KEY"]     || "").trim()) available.push("cohere");
   return available;
 }
