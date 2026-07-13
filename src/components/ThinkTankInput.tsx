@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { AgentRole, Provider, ServerConfig, RepoFileInfo } from "../types";
 import { ROLE_COLORS, ROLE_ORDER, PROVIDER_MODELS } from "../types";
 import type { SessionConfig } from "../App";
@@ -9,12 +9,12 @@ interface Props {
 }
 
 const DEFAULT_MODELS: Record<AgentRole, { provider: Provider; modelId: string }> = {
-  researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-  steelman:    { provider: "deepseek", modelId: "deepseek-chat" },
-  adversary:   { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
-  expert:      { provider: "deepseek", modelId: "deepseek-chat" },
-  synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
-  judge:       { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
+  researcher:  { provider: "cohere",     modelId: "command-a-reasoning-08-2025" },
+  steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
+  adversary:   { provider: "groq",       modelId: "deepseek-r1-distill-llama-70b" },
+  expert:      { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" },
+  synthesizer: { provider: "gemini",     modelId: "gemini-2.5-flash" },
+  judge:       { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
 };
 
 const PRESETS = [
@@ -41,26 +41,29 @@ const PACKS: Record<ModelPack, { label: string; desc: string; models: (avail: Pr
   },
   deep: {
     label: "🧠 Deep",
-    desc: "Groq Llama 70B + DeepSeek — strong reasoning, reliable speed",
+    desc: "Groq Llama 70B + DeepSeek-R1 reasoning — strong logic, reliable speed",
     models: (avail) => ({
       researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-      steelman:    avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      steelman:    avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" }       : { provider: "deepseek", modelId: "deepseek-chat" },
+      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "deepseek-r1-distill-llama-70b" } : { provider: "deepseek", modelId: "deepseek-chat" },
       expert:      { provider: "deepseek", modelId: "deepseek-chat" },
       synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
-      judge:       avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      judge:       avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" }       : { provider: "deepseek", modelId: "deepseek-chat" },
     }),
   },
   mixed: {
     label: "🌐 Multi-Model",
-    desc: "Best model per role across all providers",
+    desc: "5 distinct AI architectures — genuine disagreement, not one model role-playing",
     models: (avail) => ({
-      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-      steelman:    avail.includes("groq")     ? { provider: "groq",     modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   avail.includes("groq")     ? { provider: "groq",     modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      avail.includes("anthropic")? { provider: "anthropic", modelId: "claude-sonnet-4-5" }       : { provider: "deepseek", modelId: "deepseek-chat" },
-      synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
-      judge:       avail.includes("anthropic")? { provider: "anthropic", modelId: "claude-sonnet-4-5" }       : { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
+      researcher:  avail.includes("cohere")     ? { provider: "cohere",     modelId: "command-a-reasoning-08-2025" }             : { provider: "deepseek", modelId: "deepseek-chat" },
+      steelman:    avail.includes("groq")       ? { provider: "groq",       modelId: "llama-3.3-70b-versatile" }                 : { provider: "deepseek", modelId: "deepseek-chat" },
+      adversary:   avail.includes("groq")       ? { provider: "groq",       modelId: "deepseek-r1-distill-llama-70b" }           : { provider: "deepseek", modelId: "deepseek-chat" },
+      expert:      avail.includes("openrouter") ? { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" }
+                 : avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-5" }                       : { provider: "deepseek", modelId: "deepseek-chat" },
+      synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
+      judge:       avail.includes("openrouter") ? { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" }
+                 : avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-5" }
+                 : avail.includes("groq")       ? { provider: "groq",       modelId: "llama-3.3-70b-versatile" }                 : { provider: "deepseek", modelId: "deepseek-chat" },
     }),
   },
 };
@@ -74,7 +77,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
   const [customContext, setCustomCtx]   = useState("");
   const [expertDomain, setExpertDomain] = useState("");
   const [showAdvanced, setShowAdv]      = useState(false);
-  const [activePack, setActivePack]     = useState<ModelPack>("deep");
+  const [activePack, setActivePack]     = useState<ModelPack>("mixed");
   const [agentModels, setAgentModels]   = useState<Record<AgentRole, { provider: Provider; modelId: string }>>(DEFAULT_MODELS);
 
   // Repository import state
@@ -95,6 +98,15 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
   const [isDragOver, setIsDragOver]     = useState(false);
 
   const available = serverConfig?.availableProviders ?? ["gemini"];
+
+  // Re-apply the active pack whenever real provider availability arrives/changes,
+  // so the panel always reflects what's actually live instead of stale hardcoded defaults.
+  useEffect(() => {
+    if (serverConfig) {
+      setAgentModels(PACKS[activePack].models(serverConfig.availableProviders));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverConfig]);
 
   const applyPack = (pack: ModelPack) => {
     setActivePack(pack);
