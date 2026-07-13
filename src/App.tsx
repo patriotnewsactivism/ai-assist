@@ -60,9 +60,21 @@ const EMPTY_STATE: AppState = {
   enableSteelman: true,
 };
 
+// One TTS clip at a time, in strict order — each agent finishes speaking before
+// the next one starts, so the debate reads like a real back-and-forth.
+interface TtsItem {
+  role: string;
+  text: string;
+}
+
 export default function App() {
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
   const [state, setState] = useState<AppState>(EMPTY_STATE);
+  const [voiceOn, setVoiceOn] = useState(true);
+
+  const ttsQueueRef = useRef<TtsItem[]>([]);
+  const ttsPlayingRef = useRef(false);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     fetch("/api/config")
@@ -71,10 +83,63 @@ export default function App() {
       .catch(console.error);
   }, []);
 
+  const processTtsQueue = () => {
+    if (ttsPlayingRef.current) return;
+    const next = ttsQueueRef.current.shift();
+    if (!next) return;
+    ttsPlayingRef.current = true;
+
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: next.text, role: next.role }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`TTS ${r.status}`);
+        return r.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentAudioRef.current = audio;
+        const advance = () => {
+          URL.revokeObjectURL(url);
+          ttsPlayingRef.current = false;
+          currentAudioRef.current = null;
+          processTtsQueue();
+        };
+        audio.onended = advance;
+        audio.onerror = advance;
+        audio.play().catch(advance);
+      })
+      .catch((err) => {
+        console.warn("[TTS] failed, skipping clip:", err);
+        ttsPlayingRef.current = false;
+        processTtsQueue();
+      });
+  };
+
+  const enqueueTts = (role: string, text: string) => {
+    if (!voiceOn || !serverConfig?.ttsEnabled) return;
+    // Strip code blocks — reading raw code aloud isn't useful, and keeps clips snappy
+    const clean = text.replace(/```[\s\S]*?```/g, " code omitted. ").trim();
+    if (!clean) return;
+    ttsQueueRef.current.push({ role, text: clean });
+    processTtsQueue();
+  };
+
+  const stopVoice = () => {
+    ttsQueueRef.current = [];
+    ttsPlayingRef.current = false;
+    currentAudioRef.current?.pause();
+    currentAudioRef.current = null;
+  };
+
   const sessionDoneRef = useRef(false);
 
   const handleStart = async (cfg: SessionConfig) => {
     sessionDoneRef.current = false;
+    stopVoice();
     setState({ ...EMPTY_STATE, status: "running", enableSteelman: cfg.enableSteelman ?? true, ...(cfg.repoUrl ? { repoUrl: cfg.repoUrl } : {}) });
 
     let sessionId: string;
@@ -118,6 +183,7 @@ export default function App() {
           case "agent_thinking":
             return { ...prev, thinking: event.data };
           case "agent_complete":
+            enqueueTts(event.data.role, event.data.output);
             return { ...prev, thinking: null, turns: [...prev.turns, event.data] };
           case "sandbox_result":
             return { ...prev, sandboxResults: [...prev.sandboxResults, event.data] };
@@ -144,7 +210,10 @@ export default function App() {
     };
   };
 
-  const handleReset = () => setState(EMPTY_STATE);
+  const handleReset = () => {
+    stopVoice();
+    setState(EMPTY_STATE);
+  };
 
   return (
     <div className="app">
@@ -161,6 +230,20 @@ export default function App() {
             <span className="header-tag">
               {serverConfig.availableProviders.length} provider{serverConfig.availableProviders.length !== 1 ? "s" : ""}
             </span>
+          )}
+          {serverConfig?.ttsEnabled && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                setVoiceOn((v) => {
+                  if (v) stopVoice();
+                  return !v;
+                });
+              }}
+              style={{ fontSize: ".8rem", padding: "6px 14px" }}
+            >
+              {voiceOn ? "🔊 Voice On" : "🔇 Voice Off"}
+            </button>
           )}
           {state.status !== "idle" && (
             <button className="btn btn-ghost" onClick={handleReset} style={{ fontSize: ".8rem", padding: "6px 14px" }}>
