@@ -65,6 +65,7 @@ app.get("/api/config", (_req, res) => {
     availableProviders: getAvailableProviders(),
     tavilyEnabled: isTavilyEnabled(),
     githubConfigured: isGitHubConfigured(),
+    ttsEnabled: !!(process.env["ELEVENLABS_API_KEY"] || "").trim(),
     agentMeta: AGENT_META,
     defaultModels: DEFAULT_AGENT_MODELS,
   });
@@ -291,6 +292,56 @@ app.get("/api/debate/stream/:sessionId", (req, res) => {
   emitter.on("event", onEvent);
   emitter.once("done", onDone);
   req.on("close", cleanup);
+});
+
+// Distinct ElevenLabs voice per agent role so the debate sounds like different speakers
+const AGENT_VOICE_IDS: Record<string, string> = {
+  researcher:  "SAz9YHcvj6GT2YYXdXww", // River — relaxed, informative
+  steelman:    "JBFqnCBsd6RMkjVDRZzb", // George — warm, confident storyteller
+  adversary:   "SOYHLrjzK2X1ezoPC6cr", // Harry — fierce
+  expert:      "IKne3meq5aSn9XLyUdCD", // Charlie — deep, confident
+  synthesizer: "Xb7hH8MSUJpSbSDYk0k2", // Alice — clear, engaging educator
+  judge:       "cjVigY5qzO86Huf0OWal", // Eric — smooth, trustworthy
+};
+
+// POST /api/tts — text -> mp3 audio via ElevenLabs, voice chosen by agent role.
+// Keeps the ElevenLabs key server-side; the client only ever sends role+text.
+app.post("/api/tts", async (req, res) => {
+  const { text, role } = req.body as { text?: string; role?: string };
+  const apiKey = (process.env["ELEVENLABS_API_KEY"] || "").trim();
+  if (!apiKey) return res.status(400).json({ error: "ElevenLabs not configured" });
+  if (!text) return res.status(400).json({ error: "text is required" });
+
+  const voiceId = AGENT_VOICE_IDS[role || ""] || AGENT_VOICE_IDS["synthesizer"];
+  // Keep clips snappy for a live back-and-forth debate rather than reading a full essay
+  const clipped = text.slice(0, 2500);
+
+  try {
+    const elResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text: clipped,
+        model_id: "eleven_turbo_v2_5",
+        voice_settings: { stability: 0.4, similarity_boost: 0.75 },
+      }),
+    });
+    if (!elResp.ok) {
+      const errBody = await elResp.text();
+      console.warn(`[TTS] ElevenLabs error ${elResp.status}: ${errBody.slice(0, 200)}`);
+      return res.status(elResp.status).json({ error: "TTS provider error" });
+    }
+    res.setHeader("Content-Type", "audio/mpeg");
+    const buf = Buffer.from(await elResp.arrayBuffer());
+    res.send(buf);
+  } catch (err) {
+    console.error("[TTS] request failed", err);
+    res.status(500).json({ error: "TTS request failed" });
+  }
 });
 
 // Fallback: serve React app
