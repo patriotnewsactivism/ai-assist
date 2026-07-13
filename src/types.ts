@@ -97,6 +97,7 @@ export interface ServerConfig {
   availableProviders: Provider[];
   tavilyEnabled: boolean;
   githubConfigured: boolean;
+  ttsEnabled: boolean;
   agentMeta: Record<AgentRole, { name: string; emoji: string; description: string }>;
   defaultModels: Record<AgentRole, { provider: Provider; modelId: string }>;
 }
