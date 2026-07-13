@@ -397,20 +397,21 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: genuinely mixed providers so agents actually reason differently instead
-// of one model role-playing six personas. Steelman (Meta/Llama) vs Adversary
-// (DeepSeek-R1-distill, a real chain-of-thought reasoning model) is the core
-// disagreement — two different architectures, not one model arguing with itself.
-// Researcher/Expert/Judge lean on Gemini (Google) for a third distinct voice.
-// If Gemini's free quota is exhausted, Groq-backed roles (steelman, adversary,
-// synthesizer) keep the debate running.
+// DEFAULT: four genuinely distinct model families so agents actually reason
+// differently instead of one model role-playing six personas:
+//   - Steelman   -> Groq/Llama 3.3 70B          (Meta)
+//   - Adversary  -> Groq/DeepSeek-R1-distill    (DeepSeek reasoning lineage)
+//   - Expert     -> OpenRouter/gpt-oss-120b     (OpenAI open-weight reasoning)
+//   - Judge      -> OpenRouter/Nemotron 3 Super (NVIDIA, benchmarked on AIME/SWE-Bench)
+//   - Researcher/Synthesizer -> Gemini (Google) for a fifth distinct voice
+// If any one provider's free quota is exhausted, the other three keep the debate running.
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
-  steelman:    { provider: "groq",   modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq",   modelId: "deepseek-r1-distill-llama-70b" },
-  expert:      { provider: "gemini", modelId: "gemini-2.5-flash" },
-  synthesizer: { provider: "groq",   modelId: "llama-3.3-70b-versatile" },
-  judge:       { provider: "gemini", modelId: "gemini-2.0-flash-lite" },
+  researcher:  { provider: "gemini",     modelId: "gemini-2.0-flash-lite" },
+  steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
+  adversary:   { provider: "groq",       modelId: "deepseek-r1-distill-llama-70b" },
+  expert:      { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" },
+  synthesizer: { provider: "gemini",     modelId: "gemini-2.5-flash" },
+  judge:       { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
 };
 
 // FALLBACK: all-Groq when Gemini is not set/unavailable — still gives two
