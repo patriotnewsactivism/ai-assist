@@ -186,7 +186,6 @@ Output ONLY the JSON verdict.`;
     { provider: "deepseek",   modelId: "deepseek-chat",                          envKey: "DEEPSEEK_API_KEY" },
     { provider: "groq",       modelId: "llama-3.3-70b-versatile",                envKey: "GROQ_API_KEY" },
     { provider: "gemini",     modelId: "gemini-2.5-flash",                       envKey: "GEMINI_API_KEY" },
-    { provider: "openrouter", modelId: "openai/gpt-oss-120b:free",               envKey: "OPENROUTER_API_KEY" },
     { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free", envKey: "OPENROUTER_API_KEY" },
     { provider: "cohere",     modelId: "command-a-reasoning-08-2025",            envKey: "COHERE_API_KEY" },
   ];
@@ -195,14 +194,21 @@ Output ONLY the JSON verdict.`;
   try {
     callResult = await callModel(provider, modelId, messages);
   } catch (primaryErr) {
+    // Any primary failure (429, 404 decommissioned/unavailable model, 400 bad
+    // request, 5xx, etc.) now triggers the fallback chain — not just
+    // rate-limits/out-of-credits. A single dead/deprecated model on one
+    // provider should never be able to kill an entire debate session when
+    // five other providers are configured and available.
     const status = (primaryErr as any)?.status ?? (primaryErr as any)?.statusCode;
-    const isRateLimit = status === 429 || String((primaryErr as any)?.message).includes("429");
     const noCredits = isOutOfCredits(primaryErr);
+    const reason = noCredits
+      ? "out of credits"
+      : status
+        ? `HTTP ${status}`
+        : String((primaryErr as any)?.message ?? primaryErr).slice(0, 200);
 
-    if (!isRateLimit && !noCredits) throw primaryErr;
-
-    const reason = noCredits ? "out of credits" : "rate-limited";
-    console.warn(`[Agent:${role}] Primary ${provider}/${modelId} ${reason} — trying fallback chain`);
+    console.warn(`[Agent:${role}] Primary ${provider}/${modelId} failed (${reason}) — trying fallback chain`);
+    emit({ type: "agent_thinking", data: { role, name, emoji, round } });
 
     let lastFallbackErr: unknown = primaryErr;
     callResult = await (async () => {
@@ -217,6 +223,8 @@ Output ONLY the JSON verdict.`;
           console.warn(`[Agent:${role}] ${fb.provider}/${fb.modelId} also failed:`, (fbErr as any)?.status ?? fbErr);
         }
       }
+      // Every fallback exhausted too — this is the only case that should
+      // still kill the session.
       throw lastFallbackErr;
     })();
   }
@@ -410,8 +418,8 @@ export async function runRoundtable(
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "cohere",     modelId: "command-a-reasoning-08-2025" },
   steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq",       modelId: "openai/gpt-oss-120b" },
-  expert:      { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" },
+  adversary:   { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
+  expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
   synthesizer: { provider: "gemini",     modelId: "gemini-2.5-flash" },
   judge:       { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
 };
@@ -421,8 +429,8 @@ export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types
 export const FALLBACK_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "groq", modelId: "llama-3.3-70b-versatile" },
   steelman:    { provider: "groq", modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq", modelId: "openai/gpt-oss-120b" },
-  expert:      { provider: "groq", modelId: "openai/gpt-oss-120b" },
+  adversary:   { provider: "groq", modelId: "llama-3.3-70b-versatile" },
+  expert:      { provider: "groq", modelId: "llama-3.3-70b-versatile" },
   synthesizer: { provider: "groq", modelId: "llama-3.3-70b-versatile" },
   judge:       { provider: "groq", modelId: "llama-3.3-70b-versatile" },
 };
