@@ -304,6 +304,30 @@ const AGENT_VOICE_IDS: Record<string, string> = {
   judge:       "aura-2-zeus-en",    // masculine — deep, trustworthy, authoritative
 };
 
+// Strips markdown formatting before handing text to TTS -- agent outputs are markdown
+// (##, **bold**, bullet lists, code fences, links, etc.) and Deepgram reads the raw
+// symbols aloud verbatim ("hash hash Expert Analysis asterisk asterisk..."), which is
+// unlistenable. This reduces to clean spoken prose.
+function stripMarkdown(input: string): string {
+  let s = input;
+  s = s.replace(/```[\s\S]*?```/g, " ");           // fenced code blocks (incl. judge's ```json ... ```)
+  s = s.replace(/`([^`]+)`/g, "$1");                // inline code
+  s = s.replace(/^#{1,6}\s+/gm, "");                 // headers (## Title)
+  s = s.replace(/\*\*([^*]+)\*\*/g, "$1");           // bold **text**
+  s = s.replace(/\*([^*]+)\*/g, "$1");               // italic *text*
+  s = s.replace(/__([^_]+)__/g, "$1");              // bold __text__
+  s = s.replace(/_([^_]+)_/g, "$1");                // italic _text_
+  s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");     // links [label](url) -> label
+  s = s.replace(/^>\s?/gm, "");                      // blockquotes
+  s = s.replace(/^[-*+]\s+/gm, "");                  // unordered list markers
+  s = s.replace(/^\d+\.\s+/gm, "");                  // ordered list markers
+  s = s.replace(/^-{3,}\s*$/gm, "");                 // horizontal rules
+  s = s.replace(/\|/g, " ");                        // table pipes
+  s = s.replace(/[ \t]+/g, " ");                     // collapse extra spaces
+  s = s.replace(/\n{3,}/g, "\n\n");                  // collapse extra blank lines
+  return s.trim();
+}
+
 // POST /api/tts — text -> mp3 audio via Deepgram Aura-2, voice chosen by agent role.
 // Keeps the Deepgram key server-side; the client only ever sends role+text.
 // Switched from ElevenLabs 2026-07-14: ElevenLabs free-tier character quota
@@ -319,11 +343,12 @@ app.post("/api/tts", async (req, res) => {
   if (!text) return res.status(400).json({ error: "text is required" });
 
   const voiceModel = AGENT_VOICE_IDS[role || ""] || AGENT_VOICE_IDS["synthesizer"];
+  const plainText = stripMarkdown(text);
   // Keep clips snappy for a live back-and-forth debate rather than reading a full essay.
   // Deepgram Aura-2 hard-rejects any request over 2000 chars with a 413 -- verified via
   // live curl binary search 2026-07-14 (1999 chars = 200 OK, 2001 chars = 413). 2500 was
   // a leftover from the old ElevenLabs limit and was silently dropping every long clip.
-  const clipped = text.slice(0, 1900);
+  const clipped = plainText.slice(0, 1900);
 
   try {
     const dgResp = await fetch(
