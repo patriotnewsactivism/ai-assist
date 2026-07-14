@@ -319,8 +319,11 @@ app.post("/api/tts", async (req, res) => {
   if (!text) return res.status(400).json({ error: "text is required" });
 
   const voiceModel = AGENT_VOICE_IDS[role || ""] || AGENT_VOICE_IDS["synthesizer"];
-  // Keep clips snappy for a live back-and-forth debate rather than reading a full essay
-  const clipped = text.slice(0, 2500);
+  // Keep clips snappy for a live back-and-forth debate rather than reading a full essay.
+  // Deepgram Aura-2 hard-rejects any request over 2000 chars with a 413 -- verified via
+  // live curl binary search 2026-07-14 (1999 chars = 200 OK, 2001 chars = 413). 2500 was
+  // a leftover from the old ElevenLabs limit and was silently dropping every long clip.
+  const clipped = text.slice(0, 1900);
 
   try {
     const dgResp = await fetch(
