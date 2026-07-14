@@ -186,7 +186,6 @@ Output ONLY the JSON verdict.`;
     { provider: "deepseek", modelId: "deepseek-chat",            envKey: "DEEPSEEK_API_KEY" },
     { provider: "groq",     modelId: "llama-3.3-70b-versatile",  envKey: "GROQ_API_KEY" },
     { provider: "gemini",   modelId: "gemini-2.5-flash",         envKey: "GEMINI_API_KEY" },
-    { provider: "anthropic",modelId: "claude-sonnet-4-5",        envKey: "ANTHROPIC_API_KEY" },
   ];
 
   let callResult: { content: string; reasoning?: string };
