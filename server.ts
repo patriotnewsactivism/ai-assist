@@ -264,7 +264,7 @@ app.get("/api/debate/stream/:sessionId", (req, res) => {
     if (result) {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
       res.write(`data: ${JSON.stringify({ type: "complete", data: { finalOutput: result.finalOutput, totalRounds: 0 } })}\n\n`);
       res.end();
       return;
@@ -274,7 +274,7 @@ app.get("/api/debate/stream/:sessionId", (req, res) => {
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
   const onEvent = (event: SSEEventPayload) => res.write(`data: ${JSON.stringify(event)}\n\n`);
