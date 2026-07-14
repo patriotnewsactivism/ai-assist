@@ -407,7 +407,7 @@ export async function runRoundtable(
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "cohere",     modelId: "command-a-reasoning-08-2025" },
   steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq",       modelId: "openai/gpt-oss-120b" },
+  adversary:   { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
   expert:      { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" },
   synthesizer: { provider: "gemini",     modelId: "gemini-2.5-flash" },
   judge:       { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
@@ -418,8 +418,8 @@ export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types
 export const FALLBACK_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
   researcher:  { provider: "groq", modelId: "llama-3.3-70b-versatile" },
   steelman:    { provider: "groq", modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq", modelId: "openai/gpt-oss-120b" },
-  expert:      { provider: "groq", modelId: "openai/gpt-oss-120b" },
+  adversary:   { provider: "groq", modelId: "llama-3.3-70b-versatile" },
+  expert:      { provider: "groq", modelId: "llama-3.3-70b-versatile" },
   synthesizer: { provider: "groq", modelId: "llama-3.3-70b-versatile" },
   judge:       { provider: "groq", modelId: "llama-3.3-70b-versatile" },
 };
