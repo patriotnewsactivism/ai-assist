@@ -17,7 +17,7 @@ const MAX_TOKENS: Record<string, number> = {
   "llama-3.3-70b-versatile": 2048,   // Groq free tier 12k TPM — leave room for input
   "llama-3.1-8b-instant": 2048,
   "mixtral-8x7b-32768": 2048,
-  "deepseek-r1-distill-llama-70b": 2048,
+  "openai/gpt-oss-120b": 2048,
   "nvidia/nemotron-3-super-120b-a12b:free": 8192, // OpenRouter free tier
   "openai/gpt-oss-120b:free": 8192,                // OpenRouter free tier
   "command-a-reasoning-08-2025": 8192,              // Cohere's dedicated reasoning model
