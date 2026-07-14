@@ -183,9 +183,12 @@ Output ONLY the JSON verdict.`;
 
   // Fallback chain tried in order when primary is rate-limited or out of credits
   const AGENT_FALLBACKS: Array<{ provider: import("./types.js").Provider; modelId: string; envKey: string }> = [
-    { provider: "deepseek", modelId: "deepseek-chat",            envKey: "DEEPSEEK_API_KEY" },
-    { provider: "groq",     modelId: "llama-3.3-70b-versatile",  envKey: "GROQ_API_KEY" },
-    { provider: "gemini",   modelId: "gemini-2.5-flash",         envKey: "GEMINI_API_KEY" },
+    { provider: "deepseek",   modelId: "deepseek-chat",                          envKey: "DEEPSEEK_API_KEY" },
+    { provider: "groq",       modelId: "llama-3.3-70b-versatile",                envKey: "GROQ_API_KEY" },
+    { provider: "gemini",     modelId: "gemini-2.5-flash",                       envKey: "GEMINI_API_KEY" },
+    { provider: "openrouter", modelId: "openai/gpt-oss-120b:free",               envKey: "OPENROUTER_API_KEY" },
+    { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free", envKey: "OPENROUTER_API_KEY" },
+    { provider: "cohere",     modelId: "command-a-reasoning-08-2025",            envKey: "COHERE_API_KEY" },
   ];
 
   let callResult: { content: string; reasoning?: string };
@@ -423,3 +426,4 @@ export const FALLBACK_AGENT_MODELS: Record<AgentRole, { provider: import("./type
   synthesizer: { provider: "groq", modelId: "llama-3.3-70b-versatile" },
   judge:       { provider: "groq", modelId: "llama-3.3-70b-versatile" },
 };
+
