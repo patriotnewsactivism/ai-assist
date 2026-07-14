@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
 import type { Provider } from "./types.js";
 
 interface Message {
@@ -15,8 +14,6 @@ const MAX_TOKENS: Record<string, number> = {
   "gemini-2.0-flash": 8192,
   "gpt-4o": 16384,
   "gpt-4o-mini": 8192,
-  "claude-opus-4-5": 16384,
-  "claude-sonnet-4-5": 16384,
   "llama-3.3-70b-versatile": 2048,   // Groq free tier 12k TPM — leave room for input
   "llama-3.1-8b-instant": 2048,
   "mixtral-8x7b-32768": 2048,
@@ -108,27 +105,6 @@ export async function callModel(
     }
 
     try {
-      if (provider === "anthropic") {
-        const client = new Anthropic({
-          apiKey: (process.env["ANTHROPIC_API_KEY"] || "").trim(),
-        });
-
-        const systemMsg = messages.find((m) => m.role === "system")?.content ?? "";
-        const chatMessages = messages
-          .filter((m) => m.role !== "system")
-          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
-
-        const response = await client.messages.create({
-          model: modelId,
-          max_tokens: getMaxTokens(modelId),
-          ...(systemMsg ? { system: systemMsg } : {}),
-          messages: chatMessages,
-        });
-
-        const block = response.content[0];
-        return { content: block?.type === "text" ? block.text : "" };
-      }
-
       const client = buildOpenAIClient(provider);
       const response = await client.chat.completions.create({
         model: modelId,
@@ -157,7 +133,6 @@ export function getAvailableProviders(): Provider[] {
   if ((process.env["GEMINI_API_KEY"]     || "").trim()) available.push("gemini");
   if ((process.env["DEEPSEEK_API_KEY"]   || "").trim()) available.push("deepseek");
   if ((process.env["GROQ_API_KEY"]       || "").trim()) available.push("groq");
-  if ((process.env["ANTHROPIC_API_KEY"]  || "").trim()) available.push("anthropic");
   if ((process.env["OPENAI_API_KEY"]     || "").trim()) available.push("openai");
   if ((process.env["OPENROUTER_API_KEY"] || "").trim()) available.push("openrouter");
   if ((process.env["COHERE_API_KEY"]     || "").trim()) available.push("cohere");
