@@ -54,7 +54,6 @@ const ROUTER_CANDIDATES: Array<{ provider: Provider; modelId: string }> = [
   { provider: "deepseek", modelId: "deepseek-chat" },
   { provider: "groq",     modelId: "llama-3.3-70b-versatile" },
   { provider: "gemini",   modelId: "gemini-2.0-flash-lite" },
-  { provider: "anthropic",modelId: "claude-sonnet-4-5" },
 ];
 
 function parseRouterResponse(content: string, userInput: string): RouterOutput {
