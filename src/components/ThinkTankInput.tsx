@@ -11,8 +11,8 @@ interface Props {
 const DEFAULT_MODELS: Record<AgentRole, { provider: Provider; modelId: string }> = {
   researcher:  { provider: "cohere",     modelId: "command-a-reasoning-08-2025" },
   steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq",       modelId: "openai/gpt-oss-120b" },
-  expert:      { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" },
+  adversary:   { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
+  expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
   synthesizer: { provider: "gemini",     modelId: "gemini-2.5-flash" },
   judge:       { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
 };
@@ -45,7 +45,7 @@ const PACKS: Record<ModelPack, { label: string; desc: string; models: (avail: Pr
     models: (avail) => ({
       researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
       steelman:    avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" }       : { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "openai/gpt-oss-120b" } : { provider: "deepseek", modelId: "deepseek-chat" },
+      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
       expert:      { provider: "deepseek", modelId: "deepseek-chat" },
       synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
       judge:       avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" }       : { provider: "deepseek", modelId: "deepseek-chat" },
@@ -57,8 +57,8 @@ const PACKS: Record<ModelPack, { label: string; desc: string; models: (avail: Pr
     models: (avail) => ({
       researcher:  avail.includes("cohere")     ? { provider: "cohere",     modelId: "command-a-reasoning-08-2025" }             : { provider: "deepseek", modelId: "deepseek-chat" },
       steelman:    avail.includes("groq")       ? { provider: "groq",       modelId: "llama-3.3-70b-versatile" }                 : { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   avail.includes("groq")       ? { provider: "groq",       modelId: "openai/gpt-oss-120b" }           : { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      avail.includes("openrouter") ? { provider: "openrouter", modelId: "openai/gpt-oss-120b:free" }
+      adversary:   avail.includes("groq")       ? { provider: "groq",       modelId: "llama-3.3-70b-versatile" }           : { provider: "deepseek", modelId: "deepseek-chat" },
+      expert:      avail.includes("openrouter") ? { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" }
                  : avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-5" }                       : { provider: "deepseek", modelId: "deepseek-chat" },
       synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
       judge:       avail.includes("openrouter") ? { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" }

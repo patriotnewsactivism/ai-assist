@@ -110,7 +110,6 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
   ],
   groq: [
     { modelId: "llama-3.3-70b-versatile",        label: "Llama 3.3 70B (Fast)" },
-    { modelId: "openai/gpt-oss-120b",  label: "GPT-OSS 120B (Reasoning)" },
     { modelId: "llama-3.1-8b-instant",           label: "Llama 3.1 8B (Instant)" },
     { modelId: "mixtral-8x7b-32768",             label: "Mixtral 8x7B" },
   ],
@@ -128,8 +127,7 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
     { modelId: "gemini-2.0-flash",      label: "Gemini 2.0 Flash" },
   ],
   openrouter: [
-    { modelId: "openai/gpt-oss-120b:free",                 label: "GPT-OSS 120B (OpenAI, free)" },
-    { modelId: "nvidia/nemotron-3-super-120b-a12b:free",   label: "Nemotron 3 Super (NVIDIA, free)" },
+    { modelId: "nvidia/nemotron-3-super-120b-a12b:free",   label: "Nemotron 3 Super 120B (NVIDIA, free)" },
   ],
   cohere: [
     { modelId: "command-a-reasoning-08-2025", label: "Command A Reasoning" },
