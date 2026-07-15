@@ -16,6 +16,22 @@ import type {
 } from "./types.js";
 
 // Base role order — steelman is injected between researcher and adversary when enabled
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/```[a-zA-Z]*\n?/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*\*([^*]+)\*\*\*/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(?<![\w])\*([^*\n]+)\*(?![\w])/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/^>\s?/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^-{3,}$/gm, "")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
+    .trim();
+}
+
 const BASE_ROLES: AgentRole[] = ["researcher", "adversary", "expert", "synthesizer", "judge"];
 const ROLES_WITH_STEELMAN: AgentRole[] = ["researcher", "steelman", "adversary", "expert", "synthesizer", "judge"];
 
@@ -229,7 +245,11 @@ Output ONLY the JSON verdict.`;
     })();
   }
 
-  const { content, reasoning } = callResult;
+  const { content: rawContent, reasoning } = callResult;
+  // Plain-text output only — no markdown symbols in what agents produce (headers,
+  // bold/italic asterisks, bullet dashes, code fences, link syntax all stripped).
+  // Judge output stays untouched since it must remain parseable JSON.
+  const content = role === "judge" ? rawContent : stripMarkdown(rawContent);
 
   // Extract memory from this agent's output for future rounds
   const memory = extractMemory(role, round, content);

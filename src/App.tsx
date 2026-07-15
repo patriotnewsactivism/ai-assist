@@ -99,6 +99,9 @@ export default function App() {
         return r.blob();
       })
       .then((blob) => {
+        // Hard guard: never let two clips be audible at once, even if a stale
+        // reference somehow survived (e.g. a slow network response racing a reset).
+        currentAudioRef.current?.pause();
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         currentAudioRef.current = audio;
@@ -172,42 +175,63 @@ export default function App() {
       return;
     }
 
-    const es = new EventSource(`/api/debate/stream/${sessionId}`);
+    let retryCount = 0;
+    const MAX_RETRIES = 6;
+    let es: EventSource;
 
-    es.onmessage = (e: MessageEvent<string>) => {
-      const event = JSON.parse(e.data) as SSEEventPayload;
-      setState((prev) => {
-        switch (event.type) {
-          case "routing":
-            return { ...prev, routing: event.data };
-          case "agent_thinking":
-            return { ...prev, thinking: event.data };
-          case "agent_complete":
-            enqueueTts(event.data.role, event.data.output);
-            return { ...prev, thinking: null, turns: [...prev.turns, event.data] };
-          case "sandbox_result":
-            return { ...prev, sandboxResults: [...prev.sandboxResults, event.data] };
-          case "round_complete":
-            return { ...prev, rounds: [...prev.rounds, event.data] };
-          case "complete":
-            sessionDoneRef.current = true;
-            es.close();
-            return { ...prev, status: "complete", thinking: null, finalOutput: event.data.finalOutput, totalRounds: event.data.totalRounds };
-          case "error":
-            sessionDoneRef.current = true;
-            es.close();
-            return { ...prev, status: "error", thinking: null, error: event.data.message };
-          default:
-            return prev;
+    const attachHandlers = (source: EventSource) => {
+      source.onmessage = (e: MessageEvent<string>) => {
+        retryCount = 0; // any real message means the connection is healthy again
+        const event = JSON.parse(e.data) as SSEEventPayload;
+        setState((prev) => {
+          switch (event.type) {
+            case "routing":
+              return { ...prev, routing: event.data };
+            case "agent_thinking":
+              return { ...prev, thinking: event.data };
+            case "agent_complete":
+              enqueueTts(event.data.role, event.data.output);
+              return { ...prev, thinking: null, turns: [...prev.turns, event.data] };
+            case "sandbox_result":
+              return { ...prev, sandboxResults: [...prev.sandboxResults, event.data] };
+            case "round_complete":
+              return { ...prev, rounds: [...prev.rounds, event.data] };
+            case "complete":
+              sessionDoneRef.current = true;
+              source.close();
+              return { ...prev, status: "complete", thinking: null, finalOutput: event.data.finalOutput, totalRounds: event.data.totalRounds };
+            case "error":
+              sessionDoneRef.current = true;
+              source.close();
+              return { ...prev, status: "error", thinking: null, error: event.data.message };
+            default:
+              return prev;
+          }
+        });
+      };
+
+      source.onerror = () => {
+        if (sessionDoneRef.current) return; // session already finished cleanly — ignore
+        source.close();
+
+        if (retryCount >= MAX_RETRIES) {
+          setState((s) => s.status !== "complete" ? { ...s, status: "error", error: "Connection lost and could not be restored. Check Run History — progress up to the disconnect was saved." } : s);
+          return;
         }
-      });
+
+        retryCount += 1;
+        const delayMs = Math.min(1000 * 2 ** (retryCount - 1), 10_000); // 1s,2s,4s,8s,10s,10s
+        setState((s) => s.status === "running" ? { ...s, error: `Connection lost — reconnecting (attempt ${retryCount}/${MAX_RETRIES})...` } : s);
+        setTimeout(() => {
+          if (sessionDoneRef.current) return;
+          es = new EventSource(`/api/debate/stream/${sessionId}`);
+          attachHandlers(es);
+        }, delayMs);
+      };
     };
 
-    es.onerror = () => {
-      if (sessionDoneRef.current) return; // session already finished cleanly — ignore
-      es.close();
-      setState((s) => s.status !== "complete" ? { ...s, status: "error", error: "Connection lost — server may still be running" } : s);
-    };
+    es = new EventSource(`/api/debate/stream/${sessionId}`);
+    attachHandlers(es);
   };
 
   const handleReset = () => {

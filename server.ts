@@ -4,6 +4,7 @@ dotenv.config();
 import express from "express";
 import { EventEmitter } from "events";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import {
@@ -52,6 +53,68 @@ const sessionResults  = new Map<string, { finalOutput: string; error?: string }>
 
 // In-memory document store — keyed by docId, cleaned up after use
 const uploadedDocs = new Map<string, string>();
+
+// --- Run persistence (survives process restarts, powers history/export) ---
+const RUNS_DIR = path.join(__dirname, "runs");
+try { fs.mkdirSync(RUNS_DIR, { recursive: true }); } catch { /* already exists */ }
+
+interface PersistedRun {
+  sessionId: string;
+  input: string;
+  mode?: string;
+  startedAt: string;
+  finishedAt?: string;
+  status: "running" | "complete" | "error";
+  events: SSEEventPayload[];
+  finalOutput: string;
+  error?: string;
+}
+
+function runFilePath(sessionId: string) {
+  return path.join(RUNS_DIR, `${sessionId}.json`);
+}
+
+function saveRun(run: PersistedRun) {
+  try {
+    fs.writeFileSync(runFilePath(run.sessionId), JSON.stringify(run));
+  } catch (err) {
+    console.warn("[Runs] Failed to persist run", run.sessionId, err);
+  }
+}
+
+function loadRun(sessionId: string): PersistedRun | null {
+  try {
+    const raw = fs.readFileSync(runFilePath(sessionId), "utf8");
+    return JSON.parse(raw) as PersistedRun;
+  } catch {
+    return null;
+  }
+}
+
+function listRuns(): Array<{ sessionId: string; input: string; mode?: string; status: string; startedAt: string; finishedAt?: string }> {
+  try {
+    const files = fs.readdirSync(RUNS_DIR).filter((f) => f.endsWith(".json"));
+    const runs = files.map((f) => {
+      try {
+        const run = JSON.parse(fs.readFileSync(path.join(RUNS_DIR, f), "utf8")) as PersistedRun;
+        return {
+          sessionId: run.sessionId,
+          input: run.input.slice(0, 200),
+          status: run.status,
+          startedAt: run.startedAt,
+          ...(run.mode !== undefined ? { mode: run.mode } : {}),
+          ...(run.finishedAt !== undefined ? { finishedAt: run.finishedAt } : {}),
+        };
+      } catch {
+        return null;
+      }
+    }).filter((r): r is NonNullable<typeof r> => r !== null);
+    runs.sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""));
+    return runs;
+  } catch {
+    return [];
+  }
+}
 
 // Multer — memory storage, 10MB limit per file, max 5 files
 const upload = multer({
@@ -173,7 +236,7 @@ app.post("/api/debate", (req, res) => {
   const {
     input, maxRounds = 3, agentModels, customContext,
     qualityThreshold, expertDomain, repoUrl, repoToken,
-    enableSteelman, docId,
+    enableSteelman, docId, mode,
   } = req.body as {
     input: string;
     maxRounds?: number;
@@ -185,6 +248,7 @@ app.post("/api/debate", (req, res) => {
     repoToken?: string;
     enableSteelman?: boolean;
     docId?: string;
+    mode?: "debate" | "article_polish";
   };
 
   if (!input?.trim()) return res.status(400).json({ error: "Input is required" });
@@ -194,6 +258,23 @@ app.post("/api/debate", (req, res) => {
   emitter.setMaxListeners(20);
   sessionEmitters.set(sessionId, emitter);
 
+  const run: PersistedRun = {
+    sessionId,
+    input: input.trim(),
+    mode: mode || "debate",
+    startedAt: new Date().toISOString(),
+    status: "running",
+    events: [],
+    finalOutput: "",
+  };
+  saveRun(run);
+
+  const emitAndPersist = (event: SSEEventPayload) => {
+    emitter.emit("event", event);
+    run.events.push(event);
+    saveRun(run);
+  };
+
   (async () => {
     try {
       let fullContext = customContext || "";
@@ -202,10 +283,16 @@ app.post("/api/debate", (req, res) => {
       if (docId) {
         const docText = uploadedDocs.get(docId);
         if (docText) {
-          const docBlock = `DOCUMENT TO IMPROVE:\n\n${docText}`;
+          const docBlock = mode === "article_polish"
+            ? `SOURCE DOCUMENT — REFERENCE ONLY. This is the underlying record (e.g. a court order, official ruling, or filing). Do NOT rewrite, paraphrase, alter, or reformat any part of this source document. Use it strictly as ground truth to fact-check and inform your edits to the ARTICLE DRAFT found in the main input below.\n\n${docText}\n\n=== END SOURCE DOCUMENT — everything above this line must be left untouched ===`
+            : `DOCUMENT TO IMPROVE:\n\n${docText}`;
           fullContext = fullContext ? `${docBlock}\n\n${fullContext}` : docBlock;
           uploadedDocs.delete(docId); // one-time use
         }
+      }
+
+      if (mode === "article_polish") {
+        fullContext = `${fullContext ? fullContext + "\n\n" : ""}TASK: The main input is a news/investigative article DRAFT written by the author. Your job is only to refine, tighten, and polish that draft — improve clarity, flow, and precision, and flag or fix any factual claim that conflicts with the SOURCE DOCUMENT above. Never output, rewrite, or replace the source document itself. Never invent facts not supported by the source or the draft. Return only the improved article text.`;
       }
 
       // Append repo context
@@ -231,17 +318,25 @@ app.post("/api/debate", (req, res) => {
       };
 
       const routing = await routeInput(config.input);
-      emitter.emit("event", { type: "routing", data: routing } satisfies SSEEventPayload);
+      emitAndPersist({ type: "routing", data: routing } satisfies SSEEventPayload);
 
       const finalOutput = await runRoundtable(config, routing, (event) => {
-        emitter.emit("event", event);
+        emitAndPersist(event);
       });
 
       sessionResults.set(sessionId, { finalOutput });
+      run.status = "complete";
+      run.finalOutput = finalOutput;
+      run.finishedAt = new Date().toISOString();
+      saveRun(run);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      emitter.emit("event", { type: "error", data: { message } } satisfies SSEEventPayload);
+      emitAndPersist({ type: "error", data: { message } } satisfies SSEEventPayload);
       sessionResults.set(sessionId, { finalOutput: "", error: message });
+      run.status = "error";
+      run.error = message;
+      run.finishedAt = new Date().toISOString();
+      saveRun(run);
     } finally {
       emitter.emit("done");
       setTimeout(() => {
@@ -254,22 +349,72 @@ app.post("/api/debate", (req, res) => {
   res.json({ sessionId });
 });
 
+// GET /api/debate/runs — list all persisted runs (newest first), for history/review
+app.get("/api/debate/runs", (_req, res) => {
+  res.json({ runs: listRuns() });
+});
+
+// GET /api/debate/runs/:id — full raw run (events + final output) for review/export
+app.get("/api/debate/runs/:id", (req, res) => {
+  const run = loadRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  res.json(run);
+});
+
+// GET /api/debate/runs/:id/export — plain-text download of the final output
+app.get("/api/debate/runs/:id/export", (req, res) => {
+  const run = loadRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="thinktank-run-${run.sessionId}.txt"`);
+  res.send(run.finalOutput || "[run did not complete]");
+});
+
 // GET /api/debate/stream/:sessionId — SSE stream
 app.get("/api/debate/stream/:sessionId", (req, res) => {
   const { sessionId } = req.params;
   const emitter = sessionEmitters.get(sessionId);
 
+  // No live emitter in THIS process — either the run already finished, or the
+  // server process restarted mid-run (deploy, crash, Railway respin). Either
+  // way, the persisted run on disk is the source of truth: replay whatever
+  // happened, and resolve to a real terminal state instead of a bare 404 so a
+  // reconnecting client always gets a coherent answer.
   if (!emitter) {
     const result = sessionResults.get(sessionId);
+    const persisted = loadRun(sessionId);
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+
     if (result) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("X-Accel-Buffering", "no");
       res.write(`data: ${JSON.stringify({ type: "complete", data: { finalOutput: result.finalOutput, totalRounds: 0 } })}\n\n`);
       res.end();
       return;
     }
-    return res.status(404).json({ error: "Session not found" });
+
+    if (persisted) {
+      // Replay every event that was captured before the disconnect/restart
+      for (const ev of persisted.events) {
+        res.write(`data: ${JSON.stringify(ev)}\n\n`);
+      }
+      if (persisted.status === "complete") {
+        res.write(`data: ${JSON.stringify({ type: "complete", data: { finalOutput: persisted.finalOutput, totalRounds: 0 } })}\n\n`);
+      } else if (persisted.status === "error") {
+        res.write(`data: ${JSON.stringify({ type: "error", data: { message: persisted.error || "Run failed" } })}\n\n`);
+      } else {
+        // Was still "running" on disk with no live emitter — the process died
+        // mid-run. Surface the partial progress plus a clear, honest message
+        // rather than pretending it's still in flight.
+        res.write(`data: ${JSON.stringify({ type: "error", data: { message: "Server restarted before this run finished. Partial progress above is saved and exportable from Run History." } })}\n\n`);
+      }
+      res.end();
+      return;
+    }
+
+    res.status(404).json({ error: "Session not found" });
+    return;
   }
 
   res.setHeader("Content-Type", "text/event-stream");
