@@ -23,6 +23,7 @@ export interface ThinkingAgent {
 
 export interface AppState {
   status: "idle" | "running" | "complete" | "error";
+  sessionId?: string;
   routing: RouterOutput | null;
   rounds: RoundResult[];
   turns: AgentTurn[];
@@ -144,6 +145,7 @@ export default function App() {
     sessionDoneRef.current = false;
     stopVoice();
     setState({ ...EMPTY_STATE, status: "running", enableSteelman: cfg.enableSteelman ?? true, ...(cfg.repoUrl ? { repoUrl: cfg.repoUrl } : {}) });
+    let currentSessionId: string | undefined;
 
     let sessionId: string;
     try {
@@ -166,6 +168,8 @@ export default function App() {
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data = (await res.json()) as { sessionId: string };
       sessionId = data.sessionId;
+      currentSessionId = sessionId;
+      setState((s) => ({ ...s, sessionId }));
     } catch (err) {
       setState((s) => ({
         ...s,

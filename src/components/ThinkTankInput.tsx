@@ -391,11 +391,45 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
 
             {repoFiles && repoFiles.length > 0 && (
               <div className="repo-file-list">
-                {repoFiles.slice(0, 12).map((f) => (
-                  <span key={f.path} className="repo-file-chip">{f.path}</span>
-                ))}
-                {repoFiles.length > 12 && (
-                  <span className="repo-file-chip" style={{ opacity: .6 }}>+{repoFiles.length - 12} more</span>
+                {repoFiles.length <= 30 ? (
+                  // Small repos: show all file chips
+                  <>
+                    {repoFiles.map((f) => (
+                      <span key={f.path} className="repo-file-chip">{f.path}</span>
+                    ))}
+                  </>
+                ) : (
+                  // Large repos: show directory summary with top-level counts
+                  <>
+                    {(() => {
+                      const dirs = new Map<string, number>();
+                      let rootCount = 0;
+                      for (const f of repoFiles) {
+                        if (f.path.includes("/")) {
+                          const topDir = f.path.split("/")[0]!;
+                          dirs.set(topDir, (dirs.get(topDir) ?? 0) + 1);
+                        } else {
+                          rootCount++;
+                        }
+                      }
+                      const sorted = [...dirs.entries()].sort((a, b) => b[1] - a[1]);
+                      return (
+                        <>
+                          {rootCount > 0 && (
+                            <span className="repo-file-chip" style={{ fontWeight: 600 }}>(root) × {rootCount}</span>
+                          )}
+                          {sorted.slice(0, 15).map(([dir, count]) => (
+                            <span key={dir} className="repo-file-chip">
+                              📁 {dir}/ <span style={{ opacity: 0.6, marginLeft: 4 }}>×{count}</span>
+                            </span>
+                          ))}
+                          {sorted.length > 15 && (
+                            <span className="repo-file-chip" style={{ opacity: .6 }}>+{sorted.length - 15} more dirs</span>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             )}

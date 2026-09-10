@@ -24,6 +24,10 @@ import {
   extractDocx,
   extractHtml,
   fetchUrl,
+  buildMarkdownReport,
+  buildJsonExport,
+  buildPdfReport,
+  extractChanges,
 } from "./engine/index.js";
 import type { ThinkTankConfig, SSEEventPayload, AgentRole, Provider } from "./engine/index.js";
 
@@ -361,13 +365,65 @@ app.get("/api/debate/runs/:id", (req, res) => {
   res.json(run);
 });
 
-// GET /api/debate/runs/:id/export — plain-text download of the final output
+// GET /api/debate/runs/:id/export — plain-text download of the final output (legacy)
 app.get("/api/debate/runs/:id/export", (req, res) => {
   const run = loadRun(req.params.id);
   if (!run) return res.status(404).json({ error: "Run not found" });
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="thinktank-run-${run.sessionId}.txt"`);
   res.send(run.finalOutput || "[run did not complete]");
+});
+
+// GET /api/debate/runs/:id/export/pdf — full PDF report download
+app.get("/api/debate/runs/:id/export/pdf", async (req, res) => {
+  const run = loadRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  try {
+    const pdfBuffer = await buildPdfReport(run);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="thinktank-report-${run.sessionId}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error("[Export] PDF generation failed:", err);
+    res.status(500).json({ error: "PDF generation failed" });
+  }
+});
+
+// GET /api/debate/runs/:id/export/markdown — full markdown report
+app.get("/api/debate/runs/:id/export/markdown", (req, res) => {
+  const run = loadRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  const md = buildMarkdownReport(run, { fullHistory: true });
+  res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="thinktank-report-${run.sessionId}.md"`);
+  res.send(md);
+});
+
+// GET /api/debate/runs/:id/export/final — just the final output, no history
+app.get("/api/debate/runs/:id/export/final", (req, res) => {
+  const run = loadRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="thinktank-final-${run.sessionId}.txt"`);
+  res.send(run.finalOutput || "[run did not complete]");
+});
+
+// GET /api/debate/runs/:id/export/json — full structured JSON
+app.get("/api/debate/runs/:id/export/json", (req, res) => {
+  const run = loadRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  const json = buildJsonExport(run);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="thinktank-session-${run.sessionId}.json"`);
+  res.send(json);
+});
+
+// GET /api/debate/runs/:id/export/changes — file change manifest (for repo sessions)
+app.get("/api/debate/runs/:id/export/changes", (req, res) => {
+  const run = loadRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  const changes = extractChanges(run.finalOutput);
+  res.json({ changes, sessionId: run.sessionId });
 });
 
 // GET /api/debate/stream/:sessionId — SSE stream
