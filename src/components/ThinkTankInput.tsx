@@ -9,12 +9,12 @@ interface Props {
 }
 
 const DEFAULT_MODELS: Record<AgentRole, { provider: Provider; modelId: string }> = {
-  researcher:  { provider: "cohere",     modelId: "command-a-reasoning-08-2025" },
-  steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
-  expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
-  synthesizer: { provider: "gemini",     modelId: "gemini-2.5-flash" },
-  judge:       { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
+  researcher:  { provider: "openrouter", modelId: "thinkingmachines/inkling-small:free" },
+  steelman:    { provider: "openrouter", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+  adversary:   { provider: "openrouter", modelId: "nex-agi/nex-n2.5-pro:free" },
+  expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3.5-lightning:free" },
+  synthesizer: { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free" },
+  judge:       { provider: "openrouter", modelId: "thinkingmachines/inkling:free" },
 };
 
 const PRESETS = [
@@ -29,41 +29,38 @@ type ModelPack = "fast" | "deep" | "mixed";
 const PACKS: Record<ModelPack, { label: string; desc: string; models: (avail: Provider[]) => Record<AgentRole, { provider: Provider; modelId: string }> }> = {
   fast: {
     label: "⚡ Fast",
-    desc: "DeepSeek + Groq Llama — cheapest & fastest",
-    models: (avail) => ({
-      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-      steelman:    avail.includes("groq") ? { provider: "groq", modelId: "llama-3.1-8b-instant" } : { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "llama-3.1-8b-instant" } : { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      { provider: "deepseek", modelId: "deepseek-chat" },
-      synthesizer: { provider: "deepseek", modelId: "deepseek-chat" },
-      judge:       avail.includes("groq") ? { provider: "groq", modelId: "llama-3.1-8b-instant" } : { provider: "deepseek", modelId: "deepseek-chat" },
+    desc: "OpenRouter Free: Nex-N2.5-Mini/Pro + Ling Flash — fastest free reasoning models",
+    models: () => ({
+      researcher:  { provider: "openrouter", modelId: "nex-agi/nex-n2.5-mini:free" },
+      steelman:    { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free" },
+      adversary:   { provider: "openrouter", modelId: "nex-agi/nex-n2.5-mini:free" },
+      expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3.5-lightning:free" },
+      synthesizer: { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free" },
+      judge:       { provider: "openrouter", modelId: "nex-agi/nex-n2.5-pro:free" },
     }),
   },
   deep: {
     label: "🧠 Deep",
-    desc: "Groq Llama 70B + DeepSeek-R1 reasoning — strong logic, reliable speed",
-    models: (avail) => ({
-      researcher:  { provider: "deepseek", modelId: "deepseek-chat" },
-      steelman:    avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" }       : { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" } : { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      { provider: "deepseek", modelId: "deepseek-chat" },
-      synthesizer: { provider: "gemini",   modelId: "gemini-2.5-flash" },
-      judge:       avail.includes("groq") ? { provider: "groq", modelId: "llama-3.3-70b-versatile" }       : { provider: "deepseek", modelId: "deepseek-chat" },
+    desc: "OpenRouter Free: Inkling + Nemotron Ultra + Nex-Pro — strongest free reasoning models",
+    models: () => ({
+      researcher:  { provider: "openrouter", modelId: "thinkingmachines/inkling-small:free" },
+      steelman:    { provider: "openrouter", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+      adversary:   { provider: "openrouter", modelId: "nex-agi/nex-n2.5-pro:free" },
+      expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3.5-lightning:free" },
+      synthesizer: { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free" },
+      judge:       { provider: "openrouter", modelId: "thinkingmachines/inkling:free" },
     }),
   },
   mixed: {
     label: "🌐 Multi-Model",
-    desc: "5 distinct AI architectures — genuine disagreement, not one model role-playing",
-    models: (avail) => ({
-      researcher:  avail.includes("cohere")     ? { provider: "cohere",     modelId: "command-a-reasoning-08-2025" }             : { provider: "deepseek", modelId: "deepseek-chat" },
-      steelman:    avail.includes("groq")       ? { provider: "groq",       modelId: "llama-3.3-70b-versatile" }                 : { provider: "deepseek", modelId: "deepseek-chat" },
-      adversary:   avail.includes("groq")       ? { provider: "groq",       modelId: "llama-3.3-70b-versatile" }           : { provider: "deepseek", modelId: "deepseek-chat" },
-      expert:      avail.includes("openrouter") ? { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" }
-                 : avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-5" }                       : { provider: "deepseek", modelId: "deepseek-chat" },
-      synthesizer: { provider: "gemini", modelId: "gemini-2.5-flash" },
-      judge:       avail.includes("openrouter") ? { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" }
-                 : avail.includes("anthropic")  ? { provider: "anthropic",  modelId: "claude-sonnet-4-5" }
-                 : avail.includes("groq")       ? { provider: "groq",       modelId: "llama-3.3-70b-versatile" }                 : { provider: "deepseek", modelId: "deepseek-chat" },
+    desc: "OpenRouter Free: Six distinct free reasoning models — maximum diversity",
+    models: () => ({
+      researcher:  { provider: "openrouter", modelId: "thinkingmachines/inkling-small:free" },
+      steelman:    { provider: "openrouter", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+      adversary:   { provider: "openrouter", modelId: "nex-agi/nex-n2.5-pro:free" },
+      expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3.5-lightning:free" },
+      synthesizer: { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free" },
+      judge:       { provider: "openrouter", modelId: "thinkingmachines/inkling:free" },
     }),
   },
 };

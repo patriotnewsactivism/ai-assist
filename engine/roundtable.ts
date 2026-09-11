@@ -23,7 +23,7 @@ function stripMarkdown(text: string): string {
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/\*\*\*([^*]+)\*\*\*/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/(?<![\w])\*([^*\n]+)\*(?![\w])/g, "$1")
+    .replace(/(?<![\\w])\*([^*\n]+)\*(?![\\w])/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
     .replace(/^>\s?/gm, "")
     .replace(/^\s*[-*+]\s+/gm, "")
@@ -57,11 +57,9 @@ async function runAgent(
   const { provider, modelId } = config.agentModels[role];
   const { name, emoji } = AGENT_META[role];
 
-  // Groq free tier has 12k TPM — cap document context so input fits alongside 2k output
-  const ctxCharLimit = provider === "groq" ? 8_000 : undefined;
-  const trimmedContext = ctxCharLimit && config.customContext && config.customContext.length > ctxCharLimit
-    ? config.customContext.slice(0, ctxCharLimit) + "\n\n[...context trimmed for token limit]"
-    : config.customContext;
+  // OpenRouter has generous limits — no need to trim context like we did with Groq's 12k TPM
+  // All current models support 260k–1M+ context windows
+  const trimmedContext = config.customContext;
 
   const systemPrompt = getSystemPrompt(
     role,
@@ -197,13 +195,15 @@ Output ONLY the JSON verdict.`;
     { role: "user"   as const, content: userContent },
   ];
 
-  // Fallback chain tried in order when primary is rate-limited or out of credits
+  // Fallback chain: all OpenRouter free reasoning models so if one is busy/overloaded,
+  // another can step in. All use the same OPENROUTER_API_KEY.
   const AGENT_FALLBACKS: Array<{ provider: import("./types.js").Provider; modelId: string; envKey: string }> = [
-    { provider: "deepseek",   modelId: "deepseek-chat",                          envKey: "DEEPSEEK_API_KEY" },
-    { provider: "groq",       modelId: "llama-3.3-70b-versatile",                envKey: "GROQ_API_KEY" },
-    { provider: "gemini",     modelId: "gemini-2.5-flash",                       envKey: "GEMINI_API_KEY" },
-    { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free", envKey: "OPENROUTER_API_KEY" },
-    { provider: "cohere",     modelId: "command-a-reasoning-08-2025",            envKey: "COHERE_API_KEY" },
+    { provider: "openrouter", modelId: "nex-agi/nex-n2.5-mini:free",                envKey: "OPENROUTER_API_KEY" },
+    { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free",        envKey: "OPENROUTER_API_KEY" },
+    { provider: "openrouter", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free",    envKey: "OPENROUTER_API_KEY" },
+    { provider: "openrouter", modelId: "thinkingmachines/inkling-small:free",       envKey: "OPENROUTER_API_KEY" },
+    { provider: "openrouter", modelId: "nex-agi/nex-n2.5-pro:free",                 envKey: "OPENROUTER_API_KEY" },
+    { provider: "openrouter", modelId: "thinkingmachines/inkling:free",             envKey: "OPENROUTER_API_KEY" },
   ];
 
   let callResult: { content: string; reasoning?: string };
@@ -214,7 +214,7 @@ Output ONLY the JSON verdict.`;
     // request, 5xx, etc.) now triggers the fallback chain — not just
     // rate-limits/out-of-credits. A single dead/deprecated model on one
     // provider should never be able to kill an entire debate session when
-    // five other providers are configured and available.
+    // the fallback chain is available.
     const status = (primaryErr as any)?.status ?? (primaryErr as any)?.statusCode;
     const noCredits = isOutOfCredits(primaryErr);
     const reason = noCredits
@@ -427,31 +427,26 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: four genuinely distinct model families so agents actually reason
-// differently instead of one model role-playing six personas:
-//   - Steelman   -> Groq/Llama 3.3 70B          (Meta)
-//   - Adversary  -> Groq/DeepSeek-R1-distill    (DeepSeek reasoning lineage)
-//   - Expert     -> OpenRouter/gpt-oss-120b     (OpenAI open-weight reasoning)
-//   - Judge      -> OpenRouter/Nemotron 3 Super (NVIDIA, benchmarked on AIME/SWE-Bench)
-//   - Researcher/Synthesizer -> Gemini (Google) for a fifth distinct voice
-// If any one provider's free quota is exhausted, the other three keep the debate running.
+// DEFAULT: Six distinct free OpenRouter reasoning models (Sept 2026, catalog-current free tier)
+// Each role gets a unique model from the free tier so the debate benefits from diverse reasoning styles.
+// If any model hits rate limits, the fallback chain provides redundancy with other free models.
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "cohere",     modelId: "command-a-reasoning-08-2025" },
-  steelman:    { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq",       modelId: "llama-3.3-70b-versatile" },
-  expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
-  synthesizer: { provider: "gemini",     modelId: "gemini-2.5-flash" },
-  judge:       { provider: "openrouter", modelId: "nvidia/nemotron-3-super-120b-a12b:free" },
+  researcher:  { provider: "openrouter", modelId: "thinkingmachines/inkling-small:free" },
+  steelman:    { provider: "openrouter", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+  adversary:   { provider: "openrouter", modelId: "nex-agi/nex-n2.5-pro:free" },
+  expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3.5-lightning:free" },
+  synthesizer: { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free" },
+  judge:       { provider: "openrouter", modelId: "thinkingmachines/inkling:free" },
 };
 
-// FALLBACK: all-Groq when Gemini is not set/unavailable — still gives two
-// distinct reasoning styles (Llama vs DeepSeek-R1-distill) instead of one model.
+// FALLBACK: Same free OpenRouter models, all using OPENROUTER_API_KEY.
+// Ensures graceful degradation if any one model is temporarily unavailable.
 export const FALLBACK_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {
-  researcher:  { provider: "groq", modelId: "llama-3.3-70b-versatile" },
-  steelman:    { provider: "groq", modelId: "llama-3.3-70b-versatile" },
-  adversary:   { provider: "groq", modelId: "llama-3.3-70b-versatile" },
-  expert:      { provider: "groq", modelId: "llama-3.3-70b-versatile" },
-  synthesizer: { provider: "groq", modelId: "llama-3.3-70b-versatile" },
-  judge:       { provider: "groq", modelId: "llama-3.3-70b-versatile" },
+  researcher:  { provider: "openrouter", modelId: "thinkingmachines/inkling-small:free" },
+  steelman:    { provider: "openrouter", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+  adversary:   { provider: "openrouter", modelId: "nex-agi/nex-n2.5-pro:free" },
+  expert:      { provider: "openrouter", modelId: "nvidia/nemotron-3.5-lightning:free" },
+  synthesizer: { provider: "openrouter", modelId: "inclusionai/ling-3.0-flash-vl:free" },
+  judge:       { provider: "openrouter", modelId: "thinkingmachines/inkling:free" },
 };
 

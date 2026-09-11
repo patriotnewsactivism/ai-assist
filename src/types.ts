@@ -109,6 +109,16 @@ export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "
 // Legacy IDs remain temporarily so old saved/default selections render correctly;
 // the server auto-remaps them to the current live endpoint before calling the provider.
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
+  openrouter: [
+    { modelId: "thinkingmachines/inkling-small:free",           label: "Inkling Small: Advanced Reasoning (1.0M ctx, free)" },
+    { modelId: "thinkingmachines/inkling:free",                 label: "Inkling: Advanced Reasoning (1.0M ctx, free)" },
+    { modelId: "nvidia/nemotron-3-ultra-550b-a55b:free",        label: "Nemotron 3 Ultra: Expert Knowledge (1.0M ctx, free)" },
+    { modelId: "nvidia/nemotron-3.5-lightning:free",            label: "Nemotron 3.5 Lightning: Fast Reasoning (1.0M ctx, free)" },
+    { modelId: "nex-agi/nex-n2.5-pro:free",                     label: "Nex-N2.5 Pro: Agentic Reasoning (262K ctx, free)" },
+    { modelId: "nex-agi/nex-n2.5-mini:free",                    label: "Nex-N2.5 Mini: Lightweight Reasoning (262K ctx, free)" },
+    { modelId: "inclusionai/ling-3.0-flash-vl:free",            label: "Ling 3.0 Flash VL: Multimodal (262K ctx, free)" },
+    { modelId: "nvidia/nemotron-3-super-120b-a12b:free",        label: "Auto-upgrade: Ling 3.0 Flash VL Reasoning" },
+  ],
   deepseek: [
     { modelId: "deepseek-chat", label: "DeepSeek Chat" },
   ],
@@ -118,6 +128,11 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
     { modelId: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Groq Free Plan)" },
     { modelId: "llama-3.3-70b-versatile", label: "Auto-upgrade: GPT-OSS 120B Reasoning" },
   ],
+  gemini: [
+    { modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite Reasoning (Free Tier)" },
+    { modelId: "gemini-3-flash-preview", label: "Gemini 3 Flash (Free Tier)" },
+    { modelId: "gemini-2.5-flash", label: "Auto-upgrade: Gemini 3.1 Flash-Lite Reasoning" },
+  ],
   openai: [
     { modelId: "gpt-4o", label: "GPT-4o" },
     { modelId: "gpt-4o-mini", label: "GPT-4o Mini" },
@@ -125,17 +140,6 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
   anthropic: [
     { modelId: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
     { modelId: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
-  ],
-  gemini: [
-    { modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite Reasoning (Free Tier)" },
-    { modelId: "gemini-3-flash-preview", label: "Gemini 3 Flash (Free Tier)" },
-    { modelId: "gemini-2.5-flash", label: "Auto-upgrade: Gemini 3.1 Flash-Lite Reasoning" },
-  ],
-  openrouter: [
-    { modelId: "inclusionai/ling-3.0-flash-vl:free", label: "Ling 3.0 Flash VL Reasoning (Free, Live-Tested)" },
-    { modelId: "nex-agi/nex-n2.5-pro:free", label: "Nex N2.5 Pro Agentic Reasoning (Free, Live-Tested)" },
-    { modelId: "nex-agi/nex-n2.5-mini:free", label: "Nex N2.5 Mini Agentic Reasoning (Free)" },
-    { modelId: "nvidia/nemotron-3-super-120b-a12b:free", label: "Auto-upgrade: Ling 3.0 Flash VL Reasoning" },
   ],
   cohere: [
     { modelId: "command-a-plus-05-2026", label: "Command A+ Reasoning (Free to Rate Limit)" },
