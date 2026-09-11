@@ -226,10 +226,23 @@ export async function callModel(
         throw err;
       }
 
-      return {
-        content: msg.content ?? "",
-        reasoning: msg.reasoning_content ?? msg.reasoning ?? undefined,
-      };
+      const content = typeof msg.content === "string" ? msg.content.trim() : "";
+      const reasoning = typeof msg.reasoning_content === "string"
+        ? msg.reasoning_content
+        : typeof msg.reasoning === "string"
+          ? msg.reasoning
+          : undefined;
+
+      // A provider can return a successful HTTP response containing reasoning metadata but no
+      // assistant answer. Treat that as a failed completion so the roundtable fallback chain
+      // selects another model instead of marking an agent complete with a blank card.
+      if (!content) {
+        const err = new Error(`${provider}/${resolvedModelId} returned an empty assistant completion`);
+        (err as any).status = 502;
+        throw err;
+      }
+
+      return { content, reasoning };
     } catch (err) {
       lastErr = err;
       const status = getHttpStatus(err);
