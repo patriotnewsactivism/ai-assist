@@ -104,8 +104,10 @@ export interface ServerConfig {
 
 export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "expert", "synthesizer", "judge"];
 
-// ─── FREE OpenRouter Reasoning Models (Sept 2026 catalog) ───
-// All six models are selectable; defaults and fallbacks route to OpenRouter free tier.
+// Keep this list limited to current endpoints that are useful for reasoning.
+// Free-tier labels mean the provider offers free quota/routing; rate limits still apply.
+// Legacy IDs remain temporarily so old saved/default selections render correctly;
+// the server auto-remaps them to the current live endpoint before calling the provider.
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
   openrouter: [
     { modelId: "thinkingmachines/inkling-small:free",           label: "Inkling Small: Advanced Reasoning (1.0M ctx, free)" },
@@ -115,6 +117,7 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
     { modelId: "nex-agi/nex-n2.5-pro:free",                     label: "Nex-N2.5 Pro: Agentic Reasoning (262K ctx, free)" },
     { modelId: "nex-agi/nex-n2.5-mini:free",                    label: "Nex-N2.5 Mini: Lightweight Reasoning (262K ctx, free)" },
     { modelId: "inclusionai/ling-3.0-flash-vl:free",            label: "Ling 3.0 Flash VL: Multimodal (262K ctx, free)" },
+    { modelId: "nvidia/nemotron-3-super-120b-a12b:free",        label: "Auto-upgrade: Ling 3.0 Flash VL Reasoning" },
   ],
   deepseek: [
     { modelId: "deepseek-chat", label: "DeepSeek Chat" },
@@ -123,10 +126,12 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
     { modelId: "openai/gpt-oss-120b", label: "GPT-OSS 120B Reasoning (Groq Free Plan)" },
     { modelId: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B (Groq Free Plan)" },
     { modelId: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Groq Free Plan)" },
+    { modelId: "llama-3.3-70b-versatile", label: "Auto-upgrade: GPT-OSS 120B Reasoning" },
   ],
   gemini: [
     { modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite Reasoning (Free Tier)" },
     { modelId: "gemini-3-flash-preview", label: "Gemini 3 Flash (Free Tier)" },
+    { modelId: "gemini-2.5-flash", label: "Auto-upgrade: Gemini 3.1 Flash-Lite Reasoning" },
   ],
   openai: [
     { modelId: "gpt-4o", label: "GPT-4o" },
@@ -172,4 +177,3 @@ export interface ParsedChange {
   action: "MODIFIED" | "NEW" | "DELETE";
   originalContent?: string | undefined;
 }
-
