@@ -116,14 +116,21 @@ function getHttpStatus(err: unknown): number | undefined {
   return (err as any)?.status ?? (err as any)?.statusCode;
 }
 
+function getErrorDetail(err: unknown): string {
+  const raw = (err as any)?.error?.message ?? (err as any)?.message ?? String(err);
+  return String(raw).replace(/\s+/g, " ").slice(0, 800);
+}
+
 function is429(err: unknown): boolean {
   const s = getHttpStatus(err);
   return s === 429 || (!s && String((err as any)?.message).includes("429"));
 }
 
-function isAuthError(err: unknown): boolean {
-  const s = getHttpStatus(err);
-  return s === 401 || s === 403;
+// Only 401 is treated as a hard credential failure. OpenRouter also uses 403
+// for workspace guardrails, IP/model allowlists, and other policy restrictions;
+// globally circuit-breaking on every 403 masks the real provider response.
+function isHardAuthError(err: unknown): boolean {
+  return getHttpStatus(err) === 401;
 }
 
 // 400 "credit balance too low" — provider is configured but has no funds; don't retry
@@ -139,8 +146,8 @@ async function sleep(ms: number): Promise<void> {
 }
 
 // Bad credentials should not be retried by every agent in a six-agent round.
-// One 401/403 opens a provider-level circuit for 15 minutes. The next fallback
-// is then selected locally with no network call, eliminating failure cascades.
+// A true 401 opens a provider-level circuit for 15 minutes. A 403 is allowed
+// through so the exact OpenRouter restriction can be surfaced and diagnosed.
 const AUTH_COOLDOWN_MS = 15 * 60 * 1000;
 const providerAuthCooldown = new Map<Provider, { until: number; status: number }>();
 
@@ -155,6 +162,29 @@ function assertProviderNotCoolingDown(provider: Provider): void {
   (err as any).status = state.status;
   throw err;
 }
+
+// Validate the OpenRouter credential itself at process startup. This is separate
+// from any model call, so a key/account restriction can be distinguished from a
+// bad model ID, context-limit error, or prompt-specific guardrail. Never log the key.
+async function validateOpenRouterCredential(): Promise<void> {
+  const key = (process.env["OPENROUTER_API_KEY"] || "").trim();
+  if (!key) return;
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/key", {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (response.ok) {
+      console.log("[OpenRouter] credential validation OK");
+      return;
+    }
+    const body = (await response.text()).replace(/\s+/g, " ").slice(0, 800);
+    console.error(`[OpenRouter] credential validation failed HTTP ${response.status}: ${body}`);
+  } catch (err) {
+    console.error(`[OpenRouter] credential validation request failed: ${getErrorDetail(err)}`);
+  }
+}
+
+void validateOpenRouterCredential();
 
 export async function callModel(
   provider: Provider,
@@ -187,10 +217,12 @@ export async function callModel(
       };
     } catch (err) {
       lastErr = err;
-      if (isAuthError(err)) {
-        const status = getHttpStatus(err) ?? 401;
-        providerAuthCooldown.set(provider, { until: Date.now() + AUTH_COOLDOWN_MS, status });
-        console.error(`[Provider] ${provider} disabled for 15m after HTTP ${status}; fallbacks will skip network retries`);
+      const status = getHttpStatus(err);
+      console.error(`[Provider] ${provider}/${resolvedModelId} failed${status ? ` HTTP ${status}` : ""}: ${getErrorDetail(err)}`);
+      if (isHardAuthError(err)) {
+        const authStatus = status ?? 401;
+        providerAuthCooldown.set(provider, { until: Date.now() + AUTH_COOLDOWN_MS, status: authStatus });
+        console.error(`[Provider] ${provider} disabled for 15m after HTTP ${authStatus}; fallbacks will skip network retries`);
         throw err;
       }
       if (isOutOfCredits(err)) throw err;
@@ -210,4 +242,3 @@ export function getAvailableProviders(): Provider[] {
   if ((process.env["COHERE_API_KEY"]     || "").trim()) available.push("cohere");
   return available;
 }
-
