@@ -104,33 +104,35 @@ export interface ServerConfig {
 
 export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "expert", "synthesizer", "judge"];
 
+// ─── FREE OpenRouter Reasoning Models (Sept 2026 catalog) ───
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
+  openrouter: [
+    { modelId: "thinkingmachines/inkling-small:free",           label: "Inkling Small: Advanced Reasoning (1.0M ctx, free)" },
+    { modelId: "thinkingmachines/inkling:free",                 label: "Inkling: Advanced Reasoning (1.0M ctx, free)" },
+    { modelId: "nvidia/nemotron-3-ultra-550b-a55b:free",        label: "Nemotron 3 Ultra: Expert Knowledge (1.0M ctx, free)" },
+    { modelId: "nvidia/nemotron-3.5-lightning:free",            label: "Nemotron 3.5 Lightning: Fast Reasoning (1.0M ctx, free)" },
+    { modelId: "nex-agi/nex-n2.5-pro:free",                     label: "Nex-N2.5 Pro: Agentic Reasoning (262K ctx, free)" },
+    { modelId: "nex-agi/nex-n2.5-mini:free",                    label: "Nex-N2.5 Mini: Lightweight Reasoning (262K ctx, free)" },
+    { modelId: "inclusionai/ling-3.0-flash-vl:free",            label: "Ling 3.0 Flash VL: Multimodal (262K ctx, free)" },
+  ],
   deepseek: [
-    { modelId: "deepseek-chat", label: "DeepSeek V3" },
+    { modelId: "deepseek-v4-flash",      label: "[STALE] DeepSeek V4 Flash — credentials invalid in production" },
   ],
   groq: [
-    { modelId: "llama-3.3-70b-versatile",        label: "Llama 3.3 70B (Fast)" },
-    { modelId: "llama-3.1-8b-instant",           label: "Llama 3.1 8B (Instant)" },
-    { modelId: "mixtral-8x7b-32768",             label: "Mixtral 8x7B" },
-  ],
-  openai: [
-    { modelId: "gpt-4o",     label: "GPT-4o" },
-    { modelId: "gpt-4o-mini",label: "GPT-4o Mini" },
-  ],
-  anthropic: [
-    { modelId: "claude-sonnet-4-5",       label: "Claude Sonnet 4.5" },
-    { modelId: "claude-haiku-4-5-20251001",label: "Claude Haiku 4.5" },
+    { modelId: "qwen/qwen3.6-27b",       label: "[STALE] Groq free tier — credentials invalid in production" },
   ],
   gemini: [
-    { modelId: "gemini-2.5-flash",      label: "Gemini 2.5 Flash" },
-    { modelId: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-    { modelId: "gemini-2.0-flash",      label: "Gemini 2.0 Flash" },
+    { modelId: "gemini-3.8-flash",       label: "[STALE] Gemini — credentials invalid in production" },
   ],
-  openrouter: [
-    { modelId: "nvidia/nemotron-3-super-120b-a12b:free",   label: "Nemotron 3 Super 120B (NVIDIA, free)" },
+  openai: [
+    { modelId: "gpt-4o",     label: "GPT-4o (requires valid OpenAI key)" },
+    { modelId: "gpt-4o-mini",label: "GPT-4o Mini (requires valid OpenAI key)" },
+  ],
+  anthropic: [
+    { modelId: "claude-sonnet-4-5",         label: "Claude Sonnet 4.5 (requires valid Anthropic key)" },
   ],
   cohere: [
-    { modelId: "command-a-reasoning-08-2025", label: "Command A Reasoning" },
+    { modelId: "command-a-reasoning-08-2025", label: "[STALE] Cohere — credentials invalid in production" },
   ],
 };
 

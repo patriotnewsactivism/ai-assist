@@ -1,32 +1,39 @@
 import OpenAI from "openai";
 import type { Provider } from "./types.js";
-
 interface Message {
   role: "system" | "user" | "assistant";
   content: string;
 }
-
-// Token limits per model — Gemini 2.5 Flash supports up to 65k output
-// Groq free tier: 12,000 TPM total (input + output). Keep output low so input fits.
+// Token limits per model (Sept 2026 — free OpenRouter reasoning models)
+// These have generous context windows; we limit output to 16k for reasonable token budgets on free tier
 const MAX_TOKENS: Record<string, number> = {
+  // Free OpenRouter reasoning models (primary)
+  "thinkingmachines/inkling-small:free": 16384,
+  "thinkingmachines/inkling:free": 16384,
+  "nvidia/nemotron-3-ultra-550b-a55b:free": 16384,
+  "nvidia/nemotron-3.5-lightning:free": 16384,
+  "nex-agi/nex-n2.5-pro:free": 8192,
+  "nex-agi/nex-n2.5-mini:free": 8192,
+  "inclusionai/ling-3.0-flash-vl:free": 8192,
+  // Legacy/reference (no longer in active use but kept for compatibility)
   "gemini-2.5-flash": 16384,
   "gemini-2.0-flash-lite": 8192,
   "gemini-2.0-flash": 8192,
   "gpt-4o": 16384,
   "gpt-4o-mini": 8192,
-  "llama-3.3-70b-versatile": 2048,   // Groq free tier 12k TPM — leave room for input
+  "llama-3.3-70b-versatile": 2048,
   "llama-3.1-8b-instant": 2048,
   "mixtral-8x7b-32768": 2048,
-  "openai/gpt-oss-120b": 2048,
-  "nvidia/nemotron-3-super-120b-a12b:free": 8192, // OpenRouter free tier
-  "openai/gpt-oss-120b:free": 8192,                // OpenRouter free tier
-  "command-a-reasoning-08-2025": 8192,              // Cohere's dedicated reasoning model
+  "openai/gpt-oss-120b": 8192,
+  "openai/gpt-oss-120b:free": 8192,
+  "nvidia/nemotron-3-super-120b-a12b:free": 8192,
+  "command-a-reasoning-08-2025": 8192,
+  "thinkingmachines/inkling:free": 16384,
+  "nvidia/nemotron-3.5-lightning:free": 16384,
 };
-
 function getMaxTokens(modelId: string): number {
   return MAX_TOKENS[modelId] ?? 8192;
 }
-
 function buildOpenAIClient(provider: Provider): OpenAI {
   if (provider === "deepseek") {
     return new OpenAI({
@@ -62,21 +69,17 @@ function buildOpenAIClient(provider: Provider): OpenAI {
     apiKey: (process.env["OPENAI_API_KEY"] || "").trim(),
   });
 }
-
 function getHttpStatus(err: unknown): number | undefined {
   return (err as any)?.status ?? (err as any)?.statusCode;
 }
-
 function is429(err: unknown): boolean {
   const s = getHttpStatus(err);
   return s === 429 || (!s && String((err as any)?.message).includes("429"));
 }
-
 function isAuthError(err: unknown): boolean {
   const s = getHttpStatus(err);
   return s === 401 || s === 403;
 }
-
 // 400 "credit balance too low" — provider is configured but has no funds; don't retry
 export function isOutOfCredits(err: unknown): boolean {
   const s = getHttpStatus(err);
@@ -84,11 +87,9 @@ export function isOutOfCredits(err: unknown): boolean {
   const body = String((err as any)?.message ?? (err as any)?.error?.message ?? "");
   return /credit balance|insufficient|billing|quota exceeded/i.test(body);
 }
-
 async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
-
 export async function callModel(
   provider: Provider,
   modelId: string,
@@ -96,14 +97,12 @@ export async function callModel(
   { retries = 2, baseDelayMs = 500 }: { retries?: number; baseDelayMs?: number } = {}
 ): Promise<{ content: string; reasoning?: string }> {
   let lastErr: unknown;
-
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelayMs * 2 ** (attempt - 1); // 1s, 2s, 4s
       console.warn(`[Provider] 429 on ${provider}/${modelId} — retrying in ${delay}ms (attempt ${attempt}/${retries})`);
       await sleep(delay);
     }
-
     try {
       const client = buildOpenAIClient(provider);
       const response = await client.chat.completions.create({
@@ -111,7 +110,6 @@ export async function callModel(
         messages,
         max_tokens: getMaxTokens(modelId),
       });
-
       const msg = response.choices[0]?.message as any;
       return {
         content: msg?.content ?? "",
@@ -124,10 +122,8 @@ export async function callModel(
       if (!is429(err)) throw err;         // only retry on rate limits
     }
   }
-
   throw lastErr;
 }
-
 export function getAvailableProviders(): Provider[] {
   const available: Provider[] = [];
   if ((process.env["GEMINI_API_KEY"]     || "").trim()) available.push("gemini");
