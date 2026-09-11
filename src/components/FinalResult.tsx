@@ -31,7 +31,11 @@ export default function FinalResult({ state, onReset }: Props) {
   const [ghToken, setGhToken] = useState("");
   const [customRepoInput, setCustomRepoInput] = useState("");
   const [pushing, setPushing] = useState(false);
-  const [pushResult, setPushResult] = useState<{ prUrl?: string; filesCommitted?: number; error?: string } | null>(null);
+  const [pushResult, setPushResult] = useState<{
+    prUrl?: string | undefined;
+    filesCommitted?: number | undefined;
+    error?: string | undefined;
+  } | null>(null);
 
   // Change manifest state
   const [changes, setChanges] = useState<ParsedChange[]>([]);
