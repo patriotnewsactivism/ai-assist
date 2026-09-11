@@ -19,7 +19,7 @@ function scoreColor(score: number): string {
 }
 
 export default function FinalResult({ state, onReset }: Props) {
-  const [tab, setTab]     = useState<Tab>("output");
+  const [tab, setTab] = useState<Tab>("output");
   const [copied, setCopied] = useState(false);
 
   // GitHub push & PR review state
@@ -73,7 +73,7 @@ export default function FinalResult({ state, onReset }: Props) {
             setPrBody(`## AI Think Tank Output\n\n${goal}### Changes Summary\n${summaryList}\n\nGenerated automatically via AI Think Tank multi-agent adversarial debate.`);
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoadingChanges(false));
     }
   }, [tab, sessionId]);
@@ -202,8 +202,8 @@ export default function FinalResult({ state, onReset }: Props) {
   const actionBadge = (action: ParsedChange["action"]) => {
     const styles: Record<string, { bg: string; color: string; label: string }> = {
       MODIFIED: { bg: "rgba(245,158,11,0.15)", color: "#f59e0b", label: "MODIFIED" },
-      NEW:      { bg: "rgba(16,185,129,0.15)", color: "#10b981", label: "NEW" },
-      DELETE:   { bg: "rgba(239,68,68,0.15)",  color: "#ef4444", label: "DELETE" },
+      NEW: { bg: "rgba(16,185,129,0.15)", color: "#10b981", label: "NEW" },
+      DELETE: { bg: "rgba(239,68,68,0.15)", color: "#ef4444", label: "DELETE" },
     };
     const s = styles[action] ?? styles["MODIFIED"]!;
     return (
@@ -286,8 +286,8 @@ export default function FinalResult({ state, onReset }: Props) {
           >
             {t === "output" ? "📄 Final Output"
               : t === "rounds" ? `🔄 Debate History (${state.rounds.length} rounds)`
-              : t === "push" ? "🚀 Push to GitHub"
-              : "💾 Export"}
+                : t === "push" ? "🚀 Push to GitHub"
+                  : "💾 Export"}
           </button>
         ))}
       </div>
