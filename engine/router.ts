@@ -40,7 +40,7 @@ function regexClassify(userInput: string): RouterOutput {
   };
 }
 // Provider + model candidates tried in order for routing.
-// All are free OpenRouter reasoning models (Sept 2026 catalog, live-tested).
+// All are free OpenRouter reasoning models (Sept 2026 catalog, available free tier).
 // Ordered by latency (fastest first) for responsive routing.
 const ROUTER_CANDIDATES: Array<{ provider: Provider; modelId: string }> = [
   { provider: "openrouter", modelId: "nex-agi/nex-n2.5-mini:free" },
