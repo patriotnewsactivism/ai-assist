@@ -1,10 +1,14 @@
 import OpenAI from "openai";
 import type { Provider } from "./types.js";
+
 interface Message {
   role: "system" | "user" | "assistant";
   content: string;
 }
 
+// Keep legacy/deprecated selections working without forcing users to reconfigure saved sessions.
+// Inkling's free endpoints currently require an agentic harness, so general chat requests are
+// transparently routed through OpenRouter's working free router instead of failing with HTTP 403.
 const MODEL_ALIASES: Record<string, string> = {
   "groq:llama-3.3-70b-versatile": "openai/gpt-oss-120b",
   "groq:mixtral-8x7b-32768": "openai/gpt-oss-120b",
@@ -13,12 +17,16 @@ const MODEL_ALIASES: Record<string, string> = {
   "gemini:gemini-2.0-flash": "gemini-3.1-flash-lite",
   "openrouter:nvidia/nemotron-3-super-120b-a12b:free": "inclusionai/ling-3.0-flash-vl:free",
   "openrouter:openai/gpt-oss-120b:free": "inclusionai/ling-3.0-flash-vl:free",
+  "openrouter:thinkingmachines/inkling-small:free": "openrouter/free",
+  "openrouter:thinkingmachines/inkling:free": "openrouter/free",
   "cohere:command-a-reasoning-08-2025": "command-a-plus-05-2026",
 };
 
 function resolveModelId(provider: Provider, modelId: string): string {
   const resolved = MODEL_ALIASES[`${provider}:${modelId}`] ?? modelId;
-  if (resolved !== modelId) console.warn(`[Provider] Remapped ${provider}/${modelId} -> ${provider}/${resolved}`);
+  if (resolved !== modelId) {
+    console.warn(`[Provider] Remapped ${provider}/${modelId} -> ${provider}/${resolved}`);
+  }
   return resolved;
 }
 
@@ -48,6 +56,31 @@ function getMaxTokens(modelId: string): number {
   return MAX_TOKENS[modelId] ?? 8192;
 }
 
+// Large repository imports can exceed 500k tokens. Every currently used free OpenRouter
+// endpoint in this app is safe when we keep the request well below 262k tokens.
+// 480k characters is roughly 100k-150k tokens for typical source/code text.
+const MAX_INPUT_CHARS = 480_000;
+
+function compactText(text: string, budget: number): string {
+  if (text.length <= budget) return text;
+  const marker = "\n\n[... middle context compacted to fit the model context window ...]\n\n";
+  const usable = Math.max(0, budget - marker.length);
+  const head = Math.floor(usable * 0.65);
+  const tail = usable - head;
+  return `${text.slice(0, head)}${marker}${text.slice(-tail)}`;
+}
+
+function compactMessages(messages: Message[]): Message[] {
+  const total = messages.reduce((sum, m) => sum + m.content.length, 0);
+  if (total <= MAX_INPUT_CHARS) return messages;
+
+  const perMessage = Math.max(16_000, Math.floor(MAX_INPUT_CHARS / Math.max(messages.length, 1)));
+  const compacted = messages.map((m) => ({ ...m, content: compactText(m.content, perMessage) }));
+  const compactedTotal = compacted.reduce((sum, m) => sum + m.content.length, 0);
+  console.warn(`[Provider] Compacted prompt from ${total} to ${compactedTotal} characters to prevent context overflow`);
+  return compacted;
+}
+
 function buildOpenAIClient(provider: Provider): OpenAI {
   const common = { timeout: 45_000, maxRetries: 0 } as const;
   if (provider === "deepseek") return new OpenAI({ ...common, baseURL: "https://api.deepseek.com/v1", apiKey: (process.env["DEEPSEEK_API_KEY"] || "").trim() });
@@ -58,7 +91,10 @@ function buildOpenAIClient(provider: Provider): OpenAI {
       ...common,
       baseURL: "https://openrouter.ai/api/v1",
       apiKey: (process.env["OPENROUTER_API_KEY"] || "").trim(),
-      defaultHeaders: { "HTTP-Referer": "https://debate.donmatthews.live", "X-Title": "AI Think Tank" },
+      defaultHeaders: {
+        "HTTP-Referer": "https://debate.donmatthews.live",
+        "X-Title": "AI Think Tank",
+      },
     });
   }
   if (provider === "cohere") return new OpenAI({ ...common, baseURL: "https://api.cohere.ai/compatibility/v1", apiKey: (process.env["COHERE_API_KEY"] || "").trim() });
@@ -113,7 +149,9 @@ async function validateOpenRouterCredential(): Promise<void> {
   const key = (process.env["OPENROUTER_API_KEY"] || "").trim();
   if (!key) return;
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${key}` } });
+    const response = await fetch("https://openrouter.ai/api/v1/key", {
+      headers: { Authorization: `Bearer ${key}` },
+    });
     const body = await response.text();
     if (!response.ok) {
       console.error(`[OpenRouter] credential validation failed HTTP ${response.status}: ${body.replace(/\s+/g, " ").slice(0, 1200)}`);
@@ -144,11 +182,8 @@ async function probeOpenRouterFreeInference(): Promise<void> {
       }),
     });
     const body = await response.text();
-    if (response.ok) {
-      console.log("[OpenRouter] free inference probe OK");
-    } else {
-      console.error(`[OpenRouter] free inference probe failed HTTP ${response.status}: ${body.replace(/\s+/g, " ").slice(0, 1200)}`);
-    }
+    if (response.ok) console.log("[OpenRouter] free inference probe OK");
+    else console.error(`[OpenRouter] free inference probe failed HTTP ${response.status}: ${body.replace(/\s+/g, " ").slice(0, 1200)}`);
   } catch (err) {
     console.error(`[OpenRouter] free inference probe request failed: ${getErrorDetail(err)}`);
   }
@@ -164,22 +199,42 @@ export async function callModel(
 ): Promise<{ content: string; reasoning?: string }> {
   let lastErr: unknown;
   const resolvedModelId = resolveModelId(provider, modelId);
+  const safeMessages = compactMessages(messages);
+
   assertProviderNotCoolingDown(provider);
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelayMs * 2 ** (attempt - 1);
       console.warn(`[Provider] 429 on ${provider}/${resolvedModelId} — retrying in ${delay}ms (attempt ${attempt}/${retries})`);
       await sleep(delay);
     }
+
     try {
       const client = buildOpenAIClient(provider);
-      const response = await client.chat.completions.create({ model: resolvedModelId, messages, max_tokens: getMaxTokens(resolvedModelId) });
-      const msg = response.choices[0]?.message as any;
-      return { content: msg?.content ?? "", reasoning: msg?.reasoning_content ?? msg?.reasoning ?? undefined };
+      const response = await client.chat.completions.create({
+        model: resolvedModelId,
+        messages: safeMessages,
+        max_tokens: getMaxTokens(resolvedModelId),
+      });
+
+      const choice = response.choices?.[0];
+      const msg = choice?.message as any;
+      if (!msg) {
+        const err = new Error(`${provider}/${resolvedModelId} returned no completion choices`);
+        (err as any).status = 502;
+        throw err;
+      }
+
+      return {
+        content: msg.content ?? "",
+        reasoning: msg.reasoning_content ?? msg.reasoning ?? undefined,
+      };
     } catch (err) {
       lastErr = err;
       const status = getHttpStatus(err);
       console.error(`[Provider] ${provider}/${resolvedModelId} failed${status ? ` HTTP ${status}` : ""}: ${getErrorDetail(err)}`);
+
       if (isHardAuthError(err)) {
         const authStatus = status ?? 401;
         providerAuthCooldown.set(provider, { until: Date.now() + AUTH_COOLDOWN_MS, status: authStatus });
@@ -190,6 +245,7 @@ export async function callModel(
       if (!is429(err)) throw err;
     }
   }
+
   throw lastErr;
 }
 
