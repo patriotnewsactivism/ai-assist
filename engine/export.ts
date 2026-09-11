@@ -14,17 +14,23 @@ export interface ExportableRun {
   events: any[];
   finalOutput: string;
   error?: string;
+  repoUrl?: string;
+  repoFiles?: Array<{ path: string; content: string }>;
 }
 
 export interface ParsedChange {
   path: string;
   content: string;
   action: "MODIFIED" | "NEW" | "DELETE";
+  originalContent?: string | undefined;
 }
 
 // ── Change Manifest ──
 
-export function extractChanges(finalOutput: string): ParsedChange[] {
+export function extractChanges(
+  finalOutput: string,
+  originalFiles?: Array<{ path: string; content: string }>
+): ParsedChange[] {
   const files = parseFilesFromOutput(finalOutput);
   const changes: ParsedChange[] = [];
 
@@ -32,9 +38,18 @@ export function extractChanges(finalOutput: string): ParsedChange[] {
   const summaryMatch = finalOutput.match(/===\s*CHANGES?\s*SUMMARY\s*===\s*\n([\s\S]*?)(?:$|===)/i);
   const summaryLines = summaryMatch ? summaryMatch[1]!.split("\n").filter(l => l.trim()) : [];
 
+  const originalMap = new Map<string, string>();
+  if (originalFiles) {
+    for (const f of originalFiles) {
+      originalMap.set(f.path, f.content);
+    }
+  }
+
   for (const file of files) {
-    // Try to match action from summary
+    // Try to match action from summary or originalFiles existence
     let action: ParsedChange["action"] = "MODIFIED";
+    const hasOriginal = originalMap.has(file.path);
+
     for (const line of summaryLines) {
       if (line.includes(file.path)) {
         if (/\[NEW\]/i.test(line)) action = "NEW";
@@ -42,7 +57,18 @@ export function extractChanges(finalOutput: string): ParsedChange[] {
         break;
       }
     }
-    changes.push({ path: file.path, content: file.content, action });
+
+    // If no summary tag but originalFiles was provided, determine NEW vs MODIFIED
+    if (originalFiles && !summaryLines.some(l => l.includes(file.path))) {
+      action = hasOriginal ? "MODIFIED" : "NEW";
+    }
+
+    changes.push({
+      path: file.path,
+      content: file.content,
+      action,
+      originalContent: hasOriginal ? originalMap.get(file.path) : undefined,
+    });
   }
 
   // Also find DELETE entries in summary that have no file block
@@ -50,7 +76,13 @@ export function extractChanges(finalOutput: string): ParsedChange[] {
     if (/\[DELETE\]/i.test(line)) {
       const pathMatch = line.match(/\[DELETE\]\s*(\S+)/i);
       if (pathMatch && !changes.some(c => c.path === pathMatch[1])) {
-        changes.push({ path: pathMatch[1]!, content: "", action: "DELETE" });
+        const delPath = pathMatch[1]!;
+        changes.push({
+          path: delPath,
+          content: "",
+          action: "DELETE",
+          originalContent: originalMap.get(delPath),
+        });
       }
     }
   }
@@ -127,7 +159,7 @@ export function buildMarkdownReport(run: ExportableRun, options: { fullHistory?:
 export function buildJsonExport(run: ExportableRun): string {
   const rounds = extractRoundsFromEvents(run.events);
   const routing = extractRoutingFromEvents(run.events);
-  const changes = extractChanges(run.finalOutput);
+  const changes = extractChanges(run.finalOutput, run.repoFiles);
 
   return JSON.stringify({
     sessionId: run.sessionId,

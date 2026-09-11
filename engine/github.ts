@@ -1,5 +1,6 @@
 import { Readable } from "stream";
 import { createGunzip } from "zlib";
+import tar from "tar-stream";
 
 const GITHUB_API = "https://api.github.com";
 
@@ -218,6 +219,48 @@ async function extractTarGz(buffer: ArrayBuffer): Promise<TarEntry[]> {
   return entries;
 }
 
+async function extractTarWithTarStream(buffer: ArrayBuffer): Promise<TarEntry[]> {
+  return new Promise((resolve, reject) => {
+    // Handle both ESM default and CommonJS export shapes
+    const extractFn = (tar as any).extract ?? (tar as any).default?.extract ?? tar;
+    if (typeof extractFn !== "function") {
+      return reject(new Error("tar-stream extract is not a function"));
+    }
+    const extract = extractFn();
+    const entries: TarEntry[] = [];
+
+    extract.on("entry", (header: any, stream: any, next: () => void) => {
+      const chunks: Buffer[] = [];
+      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      stream.on("end", () => {
+        if (header.type === "file") {
+          const buf = Buffer.concat(chunks);
+          const content = buf.toString("utf8");
+          const pathParts = (header.name || "").split("/");
+          const strippedPath = pathParts.slice(1).join("/");
+          if (strippedPath) {
+            entries.push({
+              path: strippedPath,
+              size: header.size ?? buf.length,
+              content,
+            });
+          }
+        }
+        next();
+      });
+      stream.resume();
+    });
+
+    extract.on("finish", () => resolve(entries));
+    extract.on("error", reject);
+
+    const readable = new Readable();
+    readable.push(Buffer.from(buffer));
+    readable.push(null);
+    readable.pipe(extract);
+  });
+}
+
 async function decompressGzip(compressed: ArrayBuffer): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const gunzip = createGunzip();
@@ -243,6 +286,7 @@ export async function fetchRepoFiles(repoUrl: string, token?: string): Promise<R
   // Get default branch
   const repoRes = await ghRequest(`/repos/${owner}/${repo}`, token);
   if (!repoRes.ok) {
+    if (repoRes.status === 403) throw new Error("GitHub API rate limit reached. Add a personal access token or wait for rate limit reset.");
     if (repoRes.status === 404) throw new Error("Repository not found — check the URL or add a token for private repos");
     if (repoRes.status === 401) throw new Error("Authentication required — provide a GitHub personal access token");
     throw new Error(`GitHub API error: ${repoRes.status}`);
@@ -268,12 +312,18 @@ export async function fetchRepoFiles(repoUrl: string, token?: string): Promise<R
   const compressed = await tarRes.arrayBuffer();
   console.log(`[GitHub] Tarball downloaded: ${(compressed.byteLength / 1024).toFixed(0)}KB compressed`);
 
-  // Decompress and extract
+  // Decompress and extract with fallback chain: tar-stream -> manual extractTarGz -> tree API
   let tarEntries: TarEntry[];
   try {
     const decompressed = await decompressGzip(compressed);
-    tarEntries = await extractTarGz(decompressed);
-    console.log(`[GitHub] Extracted ${tarEntries.length} total entries from tarball`);
+    try {
+      tarEntries = await extractTarWithTarStream(decompressed);
+      console.log(`[GitHub] Extracted ${tarEntries.length} entries using tar-stream`);
+    } catch (tarStreamErr) {
+      console.warn(`[GitHub] tar-stream extraction failed, attempting manual tar parsing:`, tarStreamErr);
+      tarEntries = await extractTarGz(decompressed);
+      console.log(`[GitHub] Extracted ${tarEntries.length} entries using manual parser`);
+    }
   } catch (err) {
     console.warn(`[GitHub] Tarball extraction failed, falling back to tree API:`, err);
     return fetchRepoFilesLegacy(owner, repo, defaultBranch, token);

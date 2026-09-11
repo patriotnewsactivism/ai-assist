@@ -72,6 +72,8 @@ interface PersistedRun {
   events: SSEEventPayload[];
   finalOutput: string;
   error?: string;
+  repoUrl?: string;
+  repoFiles?: Array<{ path: string; content: string }>;
 }
 
 function runFilePath(sessionId: string) {
@@ -153,16 +155,29 @@ app.post("/api/repo/import", async (req, res) => {
 
 // POST /api/repo/push
 app.post("/api/repo/push", async (req, res) => {
-  const { repoUrl, finalOutput, prTitle, token } = req.body as {
-    repoUrl: string; finalOutput: string; prTitle: string; token?: string;
+  const { repoUrl, finalOutput, prTitle, prBody: customPrBody, selectedFiles, token } = req.body as {
+    repoUrl: string;
+    finalOutput: string;
+    prTitle?: string;
+    prBody?: string;
+    selectedFiles?: string[];
+    token?: string;
   };
   if (!repoUrl || !finalOutput) return res.status(400).json({ error: "repoUrl and finalOutput are required" });
   const effectiveToken = token || (process.env["GITHUB_TOKEN"] ?? "").trim();
   if (!effectiveToken) return res.status(400).json({ error: "GitHub token required" });
-  const files = parseFilesFromOutput(finalOutput);
+  let files = parseFilesFromOutput(finalOutput);
   if (files.length === 0) return res.status(400).json({ error: "No files detected in the output." });
+
+  if (Array.isArray(selectedFiles) && selectedFiles.length > 0) {
+    const selectedSet = new Set(selectedFiles);
+    files = files.filter((f) => selectedSet.has(f.path));
+    if (files.length === 0) return res.status(400).json({ error: "None of the selected files were found in the output." });
+  }
+
   try {
-    const prBody = `## AI Think Tank Output\n\nThis PR was generated automatically by the AI Think Tank.\n\n**Files changed:** ${files.length}\n\n${files.map((f) => `- \`${f.path}\``).join("\n")}`;
+    const defaultBody = `## AI Think Tank Output\n\nThis PR was generated automatically by the AI Think Tank.\n\n**Files changed:** ${files.length}\n\n${files.map((f) => `- \`${f.path}\``).join("\n")}`;
+    const prBody = customPrBody?.trim() ? customPrBody.trim() : defaultBody;
     const prUrl = await createPullRequest(repoUrl, files, prTitle || "Think Tank: AI-generated changes", prBody, effectiveToken);
     res.json({ prUrl, filesCommitted: files.length });
   } catch (err) {
@@ -305,6 +320,9 @@ app.post("/api/debate", (req, res) => {
         const files = await fetchRepoFiles(repoUrl, token);
         const repoCtx = buildRepoContext(files);
         fullContext = fullContext ? `${fullContext}\n\n${repoCtx}` : repoCtx;
+        run.repoUrl = repoUrl;
+        run.repoFiles = files.map((f) => ({ path: f.path, content: f.content }));
+        saveRun(run);
       }
 
       const config: ThinkTankConfig = {
@@ -436,8 +454,8 @@ app.get("/api/debate/runs/:id/export/json", (req, res) => {
 app.get("/api/debate/runs/:id/export/changes", (req, res) => {
   const run = loadRun(req.params.id);
   if (!run) return res.status(404).json({ error: "Run not found" });
-  const changes = extractChanges(run.finalOutput);
-  res.json({ changes, sessionId: run.sessionId });
+  const changes = extractChanges(run.finalOutput, run.repoFiles);
+  res.json({ changes, sessionId: run.sessionId, repoUrl: run.repoUrl });
 });
 
 // GET /api/debate/stream/:sessionId — SSE stream

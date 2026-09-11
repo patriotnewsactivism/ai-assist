@@ -158,3 +158,10 @@ export interface PersistedRunDetail extends PersistedRunSummary {
   error?: string | undefined;
 }
 
+export interface ParsedChange {
+  path: string;
+  content: string;
+  action: "MODIFIED" | "NEW" | "DELETE";
+  originalContent?: string | undefined;
+}
+
