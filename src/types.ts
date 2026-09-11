@@ -104,43 +104,47 @@ export interface ServerConfig {
 
 export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "expert", "synthesizer", "judge"];
 
+// Keep this list limited to current endpoints that are useful for reasoning.
+// Free-tier labels mean the provider offers free quota/routing; rate limits still apply.
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
   deepseek: [
-    { modelId: "deepseek-chat", label: "DeepSeek V3" },
+    { modelId: "deepseek-chat", label: "DeepSeek Chat" },
   ],
   groq: [
-    { modelId: "llama-3.3-70b-versatile",        label: "Llama 3.3 70B (Fast)" },
-    { modelId: "llama-3.1-8b-instant",           label: "Llama 3.1 8B (Instant)" },
-    { modelId: "mixtral-8x7b-32768",             label: "Mixtral 8x7B" },
+    { modelId: "openai/gpt-oss-120b", label: "GPT-OSS 120B Reasoning (Groq Free Plan)" },
+    { modelId: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B (Groq Free Plan)" },
+    { modelId: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Groq Free Plan)" },
   ],
   openai: [
-    { modelId: "gpt-4o",     label: "GPT-4o" },
-    { modelId: "gpt-4o-mini",label: "GPT-4o Mini" },
+    { modelId: "gpt-4o", label: "GPT-4o" },
+    { modelId: "gpt-4o-mini", label: "GPT-4o Mini" },
   ],
   anthropic: [
-    { modelId: "claude-sonnet-4-5",       label: "Claude Sonnet 4.5" },
-    { modelId: "claude-haiku-4-5-20251001",label: "Claude Haiku 4.5" },
+    { modelId: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+    { modelId: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
   ],
   gemini: [
-    { modelId: "gemini-2.5-flash",      label: "Gemini 2.5 Flash" },
-    { modelId: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-    { modelId: "gemini-2.0-flash",      label: "Gemini 2.0 Flash" },
+    { modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite Reasoning (Free Tier)" },
+    { modelId: "gemini-3-flash-preview", label: "Gemini 3 Flash (Free Tier)" },
   ],
   openrouter: [
-    { modelId: "nvidia/nemotron-3-super-120b-a12b:free",   label: "Nemotron 3 Super 120B (NVIDIA, free)" },
+    { modelId: "inclusionai/ling-3.0-flash-vl:free", label: "Ling 3.0 Flash VL Reasoning (Free, Live-Tested)" },
+    { modelId: "nex-agi/nex-n2.5-pro:free", label: "Nex N2.5 Pro Agentic Reasoning (Free, Live-Tested)" },
+    { modelId: "nex-agi/nex-n2.5-mini:free", label: "Nex N2.5 Mini Agentic Reasoning (Free)" },
   ],
   cohere: [
-    { modelId: "command-a-reasoning-08-2025", label: "Command A Reasoning" },
+    { modelId: "command-a-plus-05-2026", label: "Command A+ Reasoning (Free to Rate Limit)" },
+    { modelId: "command-a-reasoning-08-2025", label: "Command A Reasoning (Free to Rate Limit)" },
   ],
 };
 
 export const ROLE_COLORS: Record<AgentRole, string> = {
-  researcher: "#3b82f6",   // blue
-  steelman:   "#6366f1",   // indigo/purple — defender
-  adversary:  "#ef4444",   // red
-  expert:     "#8b5cf6",   // violet
-  synthesizer:"#10b981",   // emerald
-  judge:      "#f59e0b",   // amber
+  researcher: "#3b82f6",
+  steelman: "#6366f1",
+  adversary: "#ef4444",
+  expert: "#8b5cf6",
+  synthesizer: "#10b981",
+  judge: "#f59e0b",
 };
 
 export interface PersistedRunSummary {
@@ -164,4 +168,3 @@ export interface ParsedChange {
   action: "MODIFIED" | "NEW" | "DELETE";
   originalContent?: string | undefined;
 }
-
