@@ -46,8 +46,16 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(88,166,255,.08) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(188,140,255,.06) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(88,166,255,.1) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(188,140,255,.08) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 60% at 20% 80%, rgba(57,197,207,.05) 0%, transparent 50%);
+  background-attachment: fixed;
+  animation: bgBreathing 15s ease-in-out infinite alternate;
+}
+
+@keyframes bgBreathing {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 0% 20px; }
 }
 
 button { cursor: pointer; font-family: inherit; border: none; transition: all .2s var(--ease); }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import ThinkTankInput from "./components/ThinkTankInput";
 import LiveDebate from "./components/LiveDebate";
 import FinalResult from "./components/FinalResult";
+import HistoryDrawer, { reconstructStateFromRun } from "./components/HistoryDrawer";
 import "./App.css";
 import type {
   AgentRole,
@@ -12,6 +13,7 @@ import type {
   SandboxResultEvent,
   ServerConfig,
   SSEEventPayload,
+  PersistedRunDetail,
 } from "./types";
 
 export interface ThinkingAgent {
@@ -23,7 +25,7 @@ export interface ThinkingAgent {
 
 export interface AppState {
   status: "idle" | "running" | "complete" | "error";
-  sessionId?: string;
+  sessionId?: string | undefined;
   routing: RouterOutput | null;
   rounds: RoundResult[];
   turns: AgentTurn[];
@@ -32,8 +34,8 @@ export interface AppState {
   finalOutput: string;
   totalRounds: number;
   enableSteelman: boolean;
-  repoUrl?: string;
-  error?: string;
+  repoUrl?: string | undefined;
+  error?: string | undefined;
 }
 
 export interface SessionConfig {
@@ -61,8 +63,7 @@ const EMPTY_STATE: AppState = {
   enableSteelman: true,
 };
 
-// One TTS clip at a time, in strict order — each agent finishes speaking before
-// the next one starts, so the debate reads like a real back-and-forth.
+// One TTS clip at a time, in strict order
 interface TtsItem {
   role: string;
   text: string;
@@ -72,16 +73,38 @@ export default function App() {
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
   const [state, setState] = useState<AppState>(EMPTY_STATE);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [savedRunCount, setSavedRunCount] = useState<number>(0);
+  const [resumableSession, setResumableSession] = useState<{ id: string; prompt: string } | null>(null);
 
   const ttsQueueRef = useRef<TtsItem[]>([]);
   const ttsPlayingRef = useRef(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sessionDoneRef = useRef(false);
+
+  const refreshRunCount = () => {
+    fetch("/api/debate/runs")
+      .then((r) => r.json())
+      .then((data: { runs: Array<{ sessionId: string; input: string }> }) => {
+        setSavedRunCount(data.runs?.length || 0);
+        const lastId = localStorage.getItem("thinktank_active_session");
+        if (lastId) {
+          const match = data.runs?.find((r) => r.sessionId === lastId);
+          if (match) {
+            setResumableSession({ id: match.sessionId, prompt: match.input });
+          }
+        }
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
       .then((cfg: ServerConfig) => setServerConfig(cfg))
       .catch(console.error);
+
+    refreshRunCount();
   }, []);
 
   const processTtsQueue = () => {
@@ -100,8 +123,6 @@ export default function App() {
         return r.blob();
       })
       .then((blob) => {
-        // Hard guard: never let two clips be audible at once, even if a stale
-        // reference somehow survived (e.g. a slow network response racing a reset).
         currentAudioRef.current?.pause();
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
@@ -125,7 +146,6 @@ export default function App() {
 
   const enqueueTts = (role: string, text: string) => {
     if (!voiceOn || !serverConfig?.ttsEnabled) return;
-    // Strip code blocks — reading raw code aloud isn't useful, and keeps clips snappy
     const clean = text.replace(/```[\s\S]*?```/g, " code omitted. ").trim();
     if (!clean) return;
     ttsQueueRef.current.push({ role, text: clean });
@@ -139,13 +159,73 @@ export default function App() {
     currentAudioRef.current = null;
   };
 
-  const sessionDoneRef = useRef(false);
+  const connectToStream = (sessionId: string) => {
+    let retryCount = 0;
+    const MAX_RETRIES = 6;
+    let es: EventSource;
+
+    const attachHandlers = (source: EventSource) => {
+      source.onmessage = (e: MessageEvent<string>) => {
+        retryCount = 0;
+        const event = JSON.parse(e.data) as SSEEventPayload;
+        setState((prev) => {
+          switch (event.type) {
+            case "routing":
+              return { ...prev, routing: event.data };
+            case "agent_thinking":
+              return { ...prev, thinking: event.data };
+            case "agent_complete":
+              enqueueTts(event.data.role, event.data.output);
+              return { ...prev, thinking: null, turns: [...prev.turns, event.data] };
+            case "sandbox_result":
+              return { ...prev, sandboxResults: [...prev.sandboxResults, event.data] };
+            case "round_complete":
+              return { ...prev, rounds: [...prev.rounds, event.data] };
+            case "complete":
+              sessionDoneRef.current = true;
+              source.close();
+              refreshRunCount();
+              return { ...prev, status: "complete", thinking: null, finalOutput: event.data.finalOutput, totalRounds: event.data.totalRounds };
+            case "error":
+              sessionDoneRef.current = true;
+              source.close();
+              refreshRunCount();
+              return { ...prev, status: "error", thinking: null, error: event.data.message };
+            default:
+              return prev;
+          }
+        });
+      };
+
+      source.onerror = () => {
+        if (sessionDoneRef.current) return;
+        source.close();
+
+        if (retryCount >= MAX_RETRIES) {
+          setState((s) => s.status !== "complete" ? { ...s, status: "error", error: "Connection lost and could not be restored. Progress has been saved to Debate History." } : s);
+          return;
+        }
+
+        retryCount += 1;
+        const delayMs = Math.min(1000 * 2 ** (retryCount - 1), 10_000);
+        setState((s) => s.status === "running" ? { ...s, error: `Connection lost — reconnecting (${retryCount}/${MAX_RETRIES})...` } : s);
+        setTimeout(() => {
+          if (sessionDoneRef.current) return;
+          es = new EventSource(`/api/debate/stream/${sessionId}`);
+          attachHandlers(es);
+        }, delayMs);
+      };
+    };
+
+    es = new EventSource(`/api/debate/stream/${sessionId}`);
+    attachHandlers(es);
+  };
 
   const handleStart = async (cfg: SessionConfig) => {
     sessionDoneRef.current = false;
     stopVoice();
+    setResumableSession(null);
     setState({ ...EMPTY_STATE, status: "running", enableSteelman: cfg.enableSteelman ?? true, ...(cfg.repoUrl ? { repoUrl: cfg.repoUrl } : {}) });
-    let currentSessionId: string | undefined;
 
     let sessionId: string;
     try {
@@ -168,8 +248,9 @@ export default function App() {
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data = (await res.json()) as { sessionId: string };
       sessionId = data.sessionId;
-      currentSessionId = sessionId;
+      localStorage.setItem("thinktank_active_session", sessionId);
       setState((s) => ({ ...s, sessionId }));
+      refreshRunCount();
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -179,74 +260,43 @@ export default function App() {
       return;
     }
 
-    let retryCount = 0;
-    const MAX_RETRIES = 6;
-    let es: EventSource;
+    connectToStream(sessionId);
+  };
 
-    const attachHandlers = (source: EventSource) => {
-      source.onmessage = (e: MessageEvent<string>) => {
-        retryCount = 0; // any real message means the connection is healthy again
-        const event = JSON.parse(e.data) as SSEEventPayload;
-        setState((prev) => {
-          switch (event.type) {
-            case "routing":
-              return { ...prev, routing: event.data };
-            case "agent_thinking":
-              return { ...prev, thinking: event.data };
-            case "agent_complete":
-              enqueueTts(event.data.role, event.data.output);
-              return { ...prev, thinking: null, turns: [...prev.turns, event.data] };
-            case "sandbox_result":
-              return { ...prev, sandboxResults: [...prev.sandboxResults, event.data] };
-            case "round_complete":
-              return { ...prev, rounds: [...prev.rounds, event.data] };
-            case "complete":
-              sessionDoneRef.current = true;
-              source.close();
-              return { ...prev, status: "complete", thinking: null, finalOutput: event.data.finalOutput, totalRounds: event.data.totalRounds };
-            case "error":
-              sessionDoneRef.current = true;
-              source.close();
-              return { ...prev, status: "error", thinking: null, error: event.data.message };
-            default:
-              return prev;
-          }
-        });
-      };
+  const handleResumeSavedSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/debate/runs/${sessionId}`);
+      if (!res.ok) throw new Error("Could not load session");
+      const detail = (await res.json()) as PersistedRunDetail;
+      const reconstructed = reconstructStateFromRun(detail);
+      setState(reconstructed);
+      setResumableSession(null);
 
-      source.onerror = () => {
-        if (sessionDoneRef.current) return; // session already finished cleanly — ignore
-        source.close();
-
-        if (retryCount >= MAX_RETRIES) {
-          setState((s) => s.status !== "complete" ? { ...s, status: "error", error: "Connection lost and could not be restored. Check Run History — progress up to the disconnect was saved." } : s);
-          return;
-        }
-
-        retryCount += 1;
-        const delayMs = Math.min(1000 * 2 ** (retryCount - 1), 10_000); // 1s,2s,4s,8s,10s,10s
-        setState((s) => s.status === "running" ? { ...s, error: `Connection lost — reconnecting (attempt ${retryCount}/${MAX_RETRIES})...` } : s);
-        setTimeout(() => {
-          if (sessionDoneRef.current) return;
-          es = new EventSource(`/api/debate/stream/${sessionId}`);
-          attachHandlers(es);
-        }, delayMs);
-      };
-    };
-
-    es = new EventSource(`/api/debate/stream/${sessionId}`);
-    attachHandlers(es);
+      // If still running, reconnect to stream
+      if (detail.status === "running") {
+        sessionDoneRef.current = false;
+        connectToStream(sessionId);
+      }
+    } catch (err) {
+      alert("Failed to restore session");
+      localStorage.removeItem("thinktank_active_session");
+      setResumableSession(null);
+    }
   };
 
   const handleReset = () => {
     stopVoice();
+    localStorage.removeItem("thinktank_active_session");
+    setResumableSession(null);
     setState(EMPTY_STATE);
   };
+
+  const hasPartialProgress = state.turns.length > 0 || state.rounds.length > 0;
 
   return (
     <div className="app">
       <header className="app-header">
-        <div className="header-logo">
+        <div className="header-logo" onClick={handleReset} style={{ cursor: "pointer" }}>
           <div className="header-logo-icon">⚡</div>
           <span className="header-logo-text">Think Tank</span>
         </div>
@@ -273,6 +323,15 @@ export default function App() {
               {voiceOn ? "🔊 Voice On" : "🔇 Voice Off"}
             </button>
           )}
+          <button
+            className="btn btn-ghost"
+            onClick={() => setHistoryOpen(true)}
+            style={{ fontSize: ".8rem", padding: "6px 14px", display: "flex", alignItems: "center", gap: 6 }}
+            title="View saved debate sessions"
+          >
+            <span>📜 Sessions</span>
+            {savedRunCount > 0 && <span className="header-counter-badge">{savedRunCount}</span>}
+          </button>
           {state.status !== "idle" && (
             <button className="btn btn-ghost" onClick={handleReset} style={{ fontSize: ".8rem", padding: "6px 14px" }}>
               ← New Session
@@ -283,15 +342,81 @@ export default function App() {
 
       <main className="app-main">
         {state.status === "idle" && (
-          <ThinkTankInput serverConfig={serverConfig} onStart={handleStart} />
+          <>
+            {resumableSession && (
+              <div className="resume-banner">
+                <div className="resume-banner-info">
+                  <span className="resume-icon">↺</span>
+                  <div className="resume-text">
+                    <strong>Recent Session Available:</strong>
+                    <span className="resume-prompt-preview">
+                      {resumableSession.prompt ? `"${resumableSession.prompt.slice(0, 100)}..."` : `Session ${resumableSession.id}`}
+                    </span>
+                  </div>
+                </div>
+                <div className="resume-banner-actions">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleResumeSavedSession(resumableSession.id)}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      localStorage.removeItem("thinktank_active_session");
+                      setResumableSession(null);
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+            <ThinkTankInput serverConfig={serverConfig} onStart={handleStart} />
+          </>
         )}
+
         {state.status === "running" && (
           <LiveDebate state={state} />
         )}
+
         {state.status === "complete" && (
           <FinalResult state={state} onReset={handleReset} />
         )}
-        {state.status === "error" && (
+
+        {state.status === "error" && hasPartialProgress && (
+          <div className="partial-error-container">
+            <div className="partial-error-banner">
+              <div className="partial-error-content">
+                <span className="partial-error-icon">⚠️</span>
+                <div>
+                  <strong>Session Interrupted:</strong> {state.error || "An error occurred during debate."}
+                  <div className="partial-error-sub">
+                    Progress up to this point is preserved: {state.turns.length} agent turns, {state.rounds.length} rounds.
+                  </div>
+                </div>
+              </div>
+              <div className="partial-error-actions">
+                {state.sessionId && (
+                  <a
+                    href={`/api/debate/runs/${state.sessionId}/export/markdown`}
+                    download
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Export What Was Generated
+                  </a>
+                )}
+                <button className="btn btn-primary btn-sm" onClick={handleReset}>
+                  New Debate
+                </button>
+              </div>
+            </div>
+            <LiveDebate state={state} />
+          </div>
+        )}
+
+        {state.status === "error" && !hasPartialProgress && (
           <div className="error-screen">
             <div className="error-icon">❌</div>
             <h2>Session Error</h2>
@@ -303,6 +428,15 @@ export default function App() {
           </div>
         )}
       </main>
+
+      <HistoryDrawer
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onSelectRun={(loadedState) => {
+          setState(loadedState);
+        }}
+        currentSessionId={state.sessionId}
+      />
     </div>
   );
 }

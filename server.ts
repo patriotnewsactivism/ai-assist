@@ -365,6 +365,20 @@ app.get("/api/debate/runs/:id", (req, res) => {
   res.json(run);
 });
 
+// DELETE /api/debate/runs/:id — delete a persisted run
+app.delete("/api/debate/runs/:id", (req, res) => {
+  const filePath = runFilePath(req.params.id);
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+      return res.json({ success: true, deleted: req.params.id });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to delete run" });
+    }
+  }
+  res.status(404).json({ error: "Run not found" });
+});
+
 // GET /api/debate/runs/:id/export — plain-text download of the final output (legacy)
 app.get("/api/debate/runs/:id/export", (req, res) => {
   const run = loadRun(req.params.id);

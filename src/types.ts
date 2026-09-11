@@ -142,3 +142,19 @@ export const ROLE_COLORS: Record<AgentRole, string> = {
   synthesizer:"#10b981",   // emerald
   judge:      "#f59e0b",   // amber
 };
+
+export interface PersistedRunSummary {
+  sessionId: string;
+  input: string;
+  mode?: string | undefined;
+  status: "running" | "complete" | "error";
+  startedAt: string;
+  finishedAt?: string | undefined;
+}
+
+export interface PersistedRunDetail extends PersistedRunSummary {
+  events: SSEEventPayload[];
+  finalOutput: string;
+  error?: string | undefined;
+}
+
