@@ -104,9 +104,18 @@ export interface ServerConfig {
 
 export const ROLE_ORDER: AgentRole[] = ["researcher", "steelman", "adversary", "expert", "synthesizer", "judge"];
 
-// Keep this list limited to current endpoints that are useful for reasoning.
-// Free-tier labels mean the provider offers free quota/routing; rate limits still apply.
+// ─── FREE OpenRouter Reasoning Models (Sept 2026 catalog) ───
+// All six models are selectable; defaults and fallbacks route to OpenRouter free tier.
 export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string }[]> = {
+  openrouter: [
+    { modelId: "thinkingmachines/inkling-small:free",           label: "Inkling Small: Advanced Reasoning (1.0M ctx, free)" },
+    { modelId: "thinkingmachines/inkling:free",                 label: "Inkling: Advanced Reasoning (1.0M ctx, free)" },
+    { modelId: "nvidia/nemotron-3-ultra-550b-a55b:free",        label: "Nemotron 3 Ultra: Expert Knowledge (1.0M ctx, free)" },
+    { modelId: "nvidia/nemotron-3.5-lightning:free",            label: "Nemotron 3.5 Lightning: Fast Reasoning (1.0M ctx, free)" },
+    { modelId: "nex-agi/nex-n2.5-pro:free",                     label: "Nex-N2.5 Pro: Agentic Reasoning (262K ctx, free)" },
+    { modelId: "nex-agi/nex-n2.5-mini:free",                    label: "Nex-N2.5 Mini: Lightweight Reasoning (262K ctx, free)" },
+    { modelId: "inclusionai/ling-3.0-flash-vl:free",            label: "Ling 3.0 Flash VL: Multimodal (262K ctx, free)" },
+  ],
   deepseek: [
     { modelId: "deepseek-chat", label: "DeepSeek Chat" },
   ],
@@ -115,6 +124,10 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
     { modelId: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B (Groq Free Plan)" },
     { modelId: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Groq Free Plan)" },
   ],
+  gemini: [
+    { modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite Reasoning (Free Tier)" },
+    { modelId: "gemini-3-flash-preview", label: "Gemini 3 Flash (Free Tier)" },
+  ],
   openai: [
     { modelId: "gpt-4o", label: "GPT-4o" },
     { modelId: "gpt-4o-mini", label: "GPT-4o Mini" },
@@ -122,15 +135,6 @@ export const PROVIDER_MODELS: Record<Provider, { modelId: string; label: string 
   anthropic: [
     { modelId: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
     { modelId: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
-  ],
-  gemini: [
-    { modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite Reasoning (Free Tier)" },
-    { modelId: "gemini-3-flash-preview", label: "Gemini 3 Flash (Free Tier)" },
-  ],
-  openrouter: [
-    { modelId: "inclusionai/ling-3.0-flash-vl:free", label: "Ling 3.0 Flash VL Reasoning (Free, Live-Tested)" },
-    { modelId: "nex-agi/nex-n2.5-pro:free", label: "Nex N2.5 Pro Agentic Reasoning (Free, Live-Tested)" },
-    { modelId: "nex-agi/nex-n2.5-mini:free", label: "Nex N2.5 Mini Agentic Reasoning (Free)" },
   ],
   cohere: [
     { modelId: "command-a-plus-05-2026", label: "Command A+ Reasoning (Free to Rate Limit)" },
@@ -168,3 +172,4 @@ export interface ParsedChange {
   action: "MODIFIED" | "NEW" | "DELETE";
   originalContent?: string | undefined;
 }
+

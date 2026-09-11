@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 import type { Provider } from "./types.js";
-
 interface Message {
   role: "system" | "user" | "assistant";
   content: string;
@@ -20,7 +19,7 @@ const MODEL_ALIASES: Record<string, string> = {
   "gemini:gemini-2.0-flash-lite": "gemini-3.1-flash-lite",
   "gemini:gemini-2.0-flash": "gemini-3.1-flash-lite",
 
-  // Live-tested OpenRouter free reasoning endpoint (2026-09-10).
+  // OpenRouter free reasoning endpoints (Sept 2026 catalog).
   "openrouter:nvidia/nemotron-3-super-120b-a12b:free": "inclusionai/ling-3.0-flash-vl:free",
   "openrouter:openai/gpt-oss-120b:free": "inclusionai/ling-3.0-flash-vl:free",
 
@@ -37,20 +36,26 @@ function resolveModelId(provider: Provider, modelId: string): string {
   return resolved;
 }
 
-// Token limits are intentionally conservative for free-plan routes. Groq's
-// free-plan TPM is the tightest constraint, so leave room for prompt tokens.
+// Token limits are intentionally conservative for free-plan routes and free OpenRouter reasoning models.
 const MAX_TOKENS: Record<string, number> = {
+  // Free OpenRouter reasoning models (primary, Sept 2026)
+  "thinkingmachines/inkling-small:free": 16384,
+  "thinkingmachines/inkling:free": 16384,
+  "nvidia/nemotron-3-ultra-550b-a55b:free": 16384,
+  "nvidia/nemotron-3.5-lightning:free": 16384,
+  "nex-agi/nex-n2.5-pro:free": 8192,
+  "nex-agi/nex-n2.5-mini:free": 8192,
+  "inclusionai/ling-3.0-flash-vl:free": 8192,
+  // Legacy/reference
   "gemini-3.1-flash-lite": 8192,
   "gemini-2.5-flash": 8192,
+  "gemini-2.0-flash-lite": 8192,
+  "gemini-2.0-flash": 8192,
   "gpt-4o": 16384,
   "gpt-4o-mini": 8192,
   "openai/gpt-oss-120b": 2048,
   "qwen/qwen3.8-27b": 2048,
   "llama-3.1-8b-instant": 2048,
-  "inclusionai/ling-3.0-flash-vl:free": 8192,
-  "nex-agi/nex-n2.5-pro:free": 8192,
-  "nex-agi/nex-n2.5-mini:free": 8192,
-  "nvidia/nemotron-3-ultra-550b-a55b:free": 8192,
   "command-a-plus-05-2026": 8192,
   "command-a-reasoning-08-2025": 8192,
 };
@@ -168,7 +173,6 @@ export async function callModel(
       console.warn(`[Provider] 429 on ${provider}/${resolvedModelId} — retrying in ${delay}ms (attempt ${attempt}/${retries})`);
       await sleep(delay);
     }
-
     try {
       const client = buildOpenAIClient(provider);
       const response = await client.chat.completions.create({
@@ -176,7 +180,6 @@ export async function callModel(
         messages,
         max_tokens: getMaxTokens(resolvedModelId),
       });
-
       const msg = response.choices[0]?.message as any;
       return {
         content: msg?.content ?? "",
@@ -194,7 +197,6 @@ export async function callModel(
       if (!is429(err)) throw err;
     }
   }
-
   throw lastErr;
 }
 
@@ -208,3 +210,4 @@ export function getAvailableProviders(): Provider[] {
   if ((process.env["COHERE_API_KEY"]     || "").trim()) available.push("cohere");
   return available;
 }
+
