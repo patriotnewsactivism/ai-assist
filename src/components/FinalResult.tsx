@@ -1,18 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import JudgeCard from "./JudgeCard";
 import AgentCard from "./AgentCard";
+import DiffViewer, { computeLineDiff } from "./DiffViewer";
 import type { AppState } from "../App";
-import type { RepoFileInfo } from "../types";
+import type { ParsedChange } from "../types";
 
 interface Props {
   state: AppState;
   onReset: () => void;
-}
-
-interface ParsedChange {
-  path: string;
-  content: string;
-  action: "MODIFIED" | "NEW" | "DELETE";
 }
 
 type Tab = "output" | "rounds" | "export" | "push";
@@ -27,26 +22,31 @@ export default function FinalResult({ state, onReset }: Props) {
   const [tab, setTab]     = useState<Tab>("output");
   const [copied, setCopied] = useState(false);
 
-  // GitHub push state
+  // GitHub push & PR review state
   const [prTitle, setPrTitle] = useState(
     state.routing ? `Think Tank: ${state.routing.extracted_goal.slice(0, 60)}` : "Think Tank: AI-generated changes"
   );
+  const [prBody, setPrBody] = useState("");
+  const [showPrBodyEditor, setShowPrBodyEditor] = useState(false);
   const [ghToken, setGhToken] = useState("");
+  const [customRepoInput, setCustomRepoInput] = useState("");
   const [pushing, setPushing] = useState(false);
-  const [pushResult, setPushResult] = useState<{ prUrl?: string; error?: string } | null>(null);
-  const [detectedFiles, setDetectedFiles] = useState<RepoFileInfo[] | null>(null);
+  const [pushResult, setPushResult] = useState<{ prUrl?: string; filesCommitted?: number; error?: string } | null>(null);
 
   // Change manifest state
   const [changes, setChanges] = useState<ParsedChange[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [filterQuery, setFilterQuery] = useState("");
   const [loadingChanges, setLoadingChanges] = useState(false);
+  const [serverRepoUrl, setServerRepoUrl] = useState<string | null>(null);
 
   // Export loading states
   const [exportingPdf, setExportingPdf] = useState(false);
 
   const isCodeMode = state.routing?.mode === "CODE_MODE";
-  const hasRepo = !!state.repoUrl;
+  const targetRepo = state.repoUrl || serverRepoUrl || customRepoInput.trim();
+  const hasRepo = !!targetRepo;
   const sessionId = state.sessionId;
 
   // Load change manifest when switching to push tab
@@ -55,18 +55,44 @@ export default function FinalResult({ state, onReset }: Props) {
       setLoadingChanges(true);
       fetch(`/api/debate/runs/${sessionId}/export/changes`)
         .then(r => r.json())
-        .then((data: { changes?: ParsedChange[] }) => {
+        .then((data: { changes?: ParsedChange[]; repoUrl?: string }) => {
           const c = data.changes ?? [];
           setChanges(c);
           setSelectedFiles(new Set(c.map(f => f.path)));
+          // Expand first 3 files by default
+          setExpandedFiles(new Set(c.slice(0, 3).map(f => f.path)));
+          if (data.repoUrl) setServerRepoUrl(data.repoUrl);
+
+          if (c.length > 0 && !prBody) {
+            const summaryList = c.map(f => `- \`${f.path}\` (${f.action})`).join("\n");
+            const goal = state.routing?.extracted_goal ? `### Goal\n${state.routing.extracted_goal}\n\n` : "";
+            setPrBody(`## AI Think Tank Output\n\n${goal}### Changes Summary\n${summaryList}\n\nGenerated automatically via AI Think Tank multi-agent adversarial debate.`);
+          }
         })
         .catch(() => {})
         .finally(() => setLoadingChanges(false));
     }
   }, [tab, sessionId]);
 
+  const overallStats = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const c of changes) {
+      const { stats } = computeLineDiff(c.originalContent, c.content, c.action);
+      additions += stats.additions;
+      deletions += stats.deletions;
+    }
+    return { additions, deletions };
+  }, [changes]);
+
+  const filteredChanges = useMemo(() => {
+    if (!filterQuery.trim()) return changes;
+    const q = filterQuery.toLowerCase().trim();
+    return changes.filter(c => c.path.toLowerCase().includes(q));
+  }, [changes, filterQuery]);
+
   const handlePush = async () => {
-    if (!state.repoUrl) return;
+    if (!targetRepo) return;
     setPushing(true);
     setPushResult(null);
     try {
@@ -74,9 +100,11 @@ export default function FinalResult({ state, onReset }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          repoUrl: state.repoUrl,
+          repoUrl: targetRepo,
           finalOutput: state.finalOutput,
           prTitle,
+          prBody: prBody.trim() || undefined,
+          selectedFiles: Array.from(selectedFiles),
           token: ghToken || undefined,
         }),
       });
@@ -84,7 +112,7 @@ export default function FinalResult({ state, onReset }: Props) {
       if (data.error) {
         setPushResult({ error: data.error });
       } else if (data.prUrl) {
-        setPushResult({ prUrl: data.prUrl });
+        setPushResult({ prUrl: data.prUrl, filesCommitted: data.filesCommitted });
       }
     } catch (err) {
       setPushResult({ error: err instanceof Error ? err.message : "Push failed" });
@@ -148,6 +176,23 @@ export default function FinalResult({ state, onReset }: Props) {
       else next.add(path);
       return next;
     });
+  };
+
+  const toggleFileExpanded = (path: string) => {
+    setExpandedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpandedFiles(new Set(changes.map(c => c.path)));
+  };
+
+  const collapseAll = () => {
+    setExpandedFiles(new Set());
   };
 
   const actionBadge = (action: ParsedChange["action"]) => {
@@ -385,142 +430,260 @@ export default function FinalResult({ state, onReset }: Props) {
         </div>
       )}
 
-      {/* Push to GitHub tab — enhanced with file diff preview */}
+      {/* Push to GitHub tab — full PR review screen with interactive diffs */}
       {tab === "push" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {!state.repoUrl ? (
+        <div className="pr-review-container" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {!targetRepo ? (
             <div className="input-card" style={{ padding: 24 }}>
-              <h3 style={{ marginBottom: 8, fontSize: "1rem" }}>🚀 Push to GitHub</h3>
-              <p style={{ color: "var(--text2)", fontSize: ".88rem", lineHeight: 1.6 }}>
-                No repository was imported for this session. Start a new session and import a GitHub repository first — then the Think Tank can push its changes directly as a pull request.
+              <h3 style={{ marginBottom: 8, fontSize: "1.1rem" }}>🚀 Pull Request Review</h3>
+              <p style={{ color: "var(--text2)", fontSize: ".88rem", lineHeight: 1.6, marginBottom: 16 }}>
+                No repository was configured when starting this session. Enter your GitHub repository below to review changes and open a pull request directly.
               </p>
-              <button className="btn btn-primary" onClick={onReset} style={{ marginTop: 16 }}>
-                ⚡ New Session with Repository
-              </button>
+
+              <div style={{ display: "flex", gap: 10, maxWidth: 600 }}>
+                <input
+                  type="text"
+                  className="repo-url-input"
+                  placeholder="https://github.com/owner/repo"
+                  value={customRepoInput}
+                  onChange={(e) => setCustomRepoInput(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+                <button className="btn btn-primary" onClick={onReset}>
+                  ⚡ New Session with Repository
+                </button>
+              </div>
             </div>
           ) : (
             <>
-              {/* File diff preview */}
-              <div className="input-card" style={{ padding: 24 }}>
-                <h3 style={{ marginBottom: 4, fontSize: "1rem" }}>🔍 Change Preview</h3>
-                <p style={{ color: "var(--text3)", fontSize: ".82rem", marginBottom: 16 }}>
-                  {changes.length > 0
-                    ? `${changes.length} file${changes.length > 1 ? "s" : ""} detected in output — select which to include in the PR`
-                    : loadingChanges
-                      ? "Analyzing output for file changes..."
-                      : "No file changes detected in the output. The output may not contain === FILE: path === blocks."}
-                </p>
-
-                {changes.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {/* Select all / none */}
-                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: ".75rem", padding: "3px 10px" }}
-                        onClick={() => setSelectedFiles(new Set(changes.map(c => c.path)))}
+              {/* PR Header & Branch Flow */}
+              <div className="input-card pr-header-card" style={{ padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: "1.2rem" }}>🐙</span>
+                      <h3 style={{ margin: 0, fontSize: "1.05rem" }}>Pull Request Review</h3>
+                      <a
+                        href={targetRepo}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="repo-link-pill"
+                        style={{ fontSize: ".75rem", color: "var(--blue)", textDecoration: "none" }}
                       >
-                        Select All
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: ".75rem", padding: "3px 10px" }}
-                        onClick={() => setSelectedFiles(new Set())}
-                      >
-                        Deselect All
-                      </button>
-                      <span style={{ color: "var(--text3)", fontSize: ".78rem", marginLeft: "auto" }}>
-                        {selectedFiles.size}/{changes.length} selected
-                      </span>
+                        {targetRepo.replace(/^https?:\/\/github\.com\//, "")} ↗
+                      </a>
                     </div>
+                    <div style={{ fontSize: ".8rem", color: "var(--text3)", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>base: <code style={{ color: "var(--text2)" }}>main</code></span>
+                      <span>←</span>
+                      <span>head: <code style={{ color: "var(--accent)" }}>think-tank/update</code></span>
+                    </div>
+                  </div>
 
-                    {changes.map((change) => (
-                      <div
-                        key={change.path}
-                        style={{
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          borderRadius: 8,
-                          overflow: "hidden",
-                          background: selectedFiles.has(change.path) ? "rgba(99,102,241,0.05)" : "rgba(255,255,255,0.02)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex", alignItems: "center", gap: 10,
-                            padding: "10px 14px", cursor: "pointer",
-                          }}
-                          onClick={() => toggleFileSelection(change.path)}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedFiles.has(change.path)}
-                            onChange={() => toggleFileSelection(change.path)}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ accentColor: "#6366f1" }}
-                          />
-                          {actionBadge(change.action)}
-                          <code style={{ fontSize: ".82rem", color: "var(--text1)", flex: 1 }}>
-                            {change.path}
-                          </code>
-                          <span style={{ color: "var(--text3)", fontSize: ".75rem" }}>
-                            {(change.content.length / 1024).toFixed(1)}KB
-                          </span>
-                          <button
-                            className="btn btn-ghost"
-                            style={{ fontSize: ".7rem", padding: "2px 8px" }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpandedFile(expandedFile === change.path ? null : change.path);
-                            }}
-                          >
-                            {expandedFile === change.path ? "▲ Hide" : "▼ Preview"}
-                          </button>
-                        </div>
-
-                        {expandedFile === change.path && (
-                          <pre style={{
-                            margin: 0, padding: "12px 14px", fontSize: ".78rem",
-                            borderTop: "1px solid rgba(255,255,255,0.06)",
-                            background: "rgba(0,0,0,0.3)", color: "var(--text2)",
-                            maxHeight: 300, overflow: "auto", whiteSpace: "pre-wrap",
-                          }}>
-                            {change.content.slice(0, 5000)}
-                            {change.content.length > 5000 && "\n\n... [truncated in preview]"}
-                          </pre>
-                        )}
+                  {/* Summary Stats */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div className="pr-stat-badge">
+                      <span style={{ fontWeight: 700 }}>{changes.length}</span> files changed
+                    </div>
+                    {overallStats.additions > 0 && (
+                      <div className="pr-stat-badge pr-stat-add">
+                        +{overallStats.additions}
                       </div>
-                    ))}
+                    )}
+                    {overallStats.deletions > 0 && (
+                      <div className="pr-stat-badge pr-stat-del">
+                        -{overallStats.deletions}
+                      </div>
+                    )}
+                    <div className="pr-stat-badge pr-stat-selected">
+                      {selectedFiles.size}/{changes.length} included in PR
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Changes & Diff Viewer Section */}
+              <div className="input-card" style={{ padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: ".95rem", fontWeight: 700 }}>
+                      Files Changed ({filteredChanges.length}{filterQuery ? ` of ${changes.length}` : ""})
+                    </h3>
+                    <p style={{ margin: "2px 0 0", color: "var(--text3)", fontSize: ".78rem" }}>
+                      Inspect code diffs, verify line changes, and choose which files to commit
+                    </p>
+                  </div>
+
+                  {/* Toolbar */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <input
+                      type="text"
+                      className="repo-url-input"
+                      placeholder="Filter files..."
+                      value={filterQuery}
+                      onChange={(e) => setFilterQuery(e.target.value)}
+                      style={{ fontSize: ".75rem", padding: "4px 10px", width: 160 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ fontSize: ".75rem", padding: "4px 10px" }}
+                      onClick={() => setSelectedFiles(new Set(changes.map(c => c.path)))}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ fontSize: ".75rem", padding: "4px 10px" }}
+                      onClick={() => setSelectedFiles(new Set())}
+                    >
+                      Deselect All
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ fontSize: ".75rem", padding: "4px 10px" }}
+                      onClick={expandedFiles.size === changes.length ? collapseAll : expandAll}
+                    >
+                      {expandedFiles.size === changes.length ? "Collapse All" : "Expand All"}
+                    </button>
+                  </div>
+                </div>
+
+                {loadingChanges && (
+                  <div style={{ padding: "30px 0", textAlign: "center", color: "var(--text3)", fontSize: ".85rem" }}>
+                    ⏳ Extracting file changes and computing diffs...
+                  </div>
+                )}
+
+                {!loadingChanges && changes.length === 0 && (
+                  <div style={{ padding: "30px 0", textAlign: "center", color: "var(--text3)", fontSize: ".85rem" }}>
+                    No file changes detected in the final synthesis. The output did not contain <code>=== FILE: path ===</code> code blocks.
+                  </div>
+                )}
+
+                {!loadingChanges && filteredChanges.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {filteredChanges.map((change) => {
+                      const isExpanded = expandedFiles.has(change.path);
+                      const isSelected = selectedFiles.has(change.path);
+                      const { stats } = computeLineDiff(change.originalContent, change.content, change.action);
+
+                      return (
+                        <div
+                          key={change.path}
+                          className={`pr-file-card ${isSelected ? "selected" : ""}`}
+                          style={{
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 8,
+                            overflow: "hidden",
+                            background: isSelected ? "rgba(99,102,241,0.03)" : "rgba(255,255,255,0.01)",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          {/* File Card Header */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              padding: "10px 14px",
+                              cursor: "pointer",
+                              background: "rgba(255,255,255,0.02)",
+                              borderBottom: isExpanded ? "1px solid rgba(255,255,255,0.06)" : "none",
+                            }}
+                            onClick={() => toggleFileExpanded(change.path)}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleFileSelection(change.path)}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ accentColor: "#6366f1", cursor: "pointer" }}
+                              title="Include file in PR"
+                            />
+                            {actionBadge(change.action)}
+                            <code style={{ fontSize: ".84rem", color: "var(--text1)", flex: 1, fontFamily: "monospace" }}>
+                              {change.path}
+                            </code>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <div className="diff-stats-pill" style={{ margin: 0 }}>
+                                {stats.additions > 0 && <span className="diff-stat-add">+{stats.additions}</span>}
+                                {stats.deletions > 0 && <span className="diff-stat-del">-{stats.deletions}</span>}
+                              </div>
+                              <span style={{ color: "var(--text3)", fontSize: ".75rem" }}>
+                                {(change.content.length / 1024).toFixed(1)}KB
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                style={{ fontSize: ".72rem", padding: "2px 8px" }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleFileExpanded(change.path);
+                                }}
+                              >
+                                {isExpanded ? "▲ Hide Diff" : "▼ View Diff"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Expanded Diff Viewer */}
+                          {isExpanded && (
+                            <div style={{ padding: "8px 12px 12px", background: "rgba(0,0,0,0.25)" }}>
+                              <DiffViewer
+                                path={change.path}
+                                originalContent={change.originalContent}
+                                newContent={change.content}
+                                action={change.action}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
-              {/* PR creation form */}
+              {/* PR Submission Form */}
               <div className="input-card" style={{ padding: 24 }}>
-                <h3 style={{ marginBottom: 4, fontSize: "1rem" }}>🚀 Create Pull Request</h3>
+                <h3 style={{ marginBottom: 4, fontSize: "1.05rem" }}>🚀 Open Pull Request</h3>
                 <p style={{ color: "var(--text3)", fontSize: ".82rem", marginBottom: 16 }}>
-                  Repository: <code style={{ color: "var(--blue)" }}>{state.repoUrl}</code>
+                  Commit selected changes directly to a new feature branch and create a PR
                 </p>
 
                 {pushResult?.prUrl ? (
-                  <div className="push-success">
-                    <div className="push-success-icon">✅</div>
-                    <div>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>Pull request created!</div>
+                  <div className="push-success" style={{ padding: 20 }}>
+                    <div className="push-success-icon" style={{ fontSize: "2rem" }}>🎉</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 4 }}>
+                        Pull request created successfully!
+                      </div>
+                      <div style={{ color: "var(--text2)", fontSize: ".85rem", marginBottom: 12 }}>
+                        {pushResult.filesCommitted ?? selectedFiles.size} file{(pushResult.filesCommitted ?? selectedFiles.size) !== 1 ? "s" : ""} committed to feature branch.
+                      </div>
                       <a
                         href={pushResult.prUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="push-pr-link"
+                        className="btn btn-primary"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: ".9rem", padding: "8px 18px" }}
                       >
-                        {pushResult.prUrl}
+                        Open Pull Request on GitHub ↗
                       </a>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div>
-                        <div className="control-label" style={{ marginBottom: 6 }}>PR title</div>
+                        <div className="control-label" style={{ marginBottom: 6 }}>PR Title</div>
                         <input
                           type="text"
                           className="repo-url-input"
@@ -529,12 +692,53 @@ export default function FinalResult({ state, onReset }: Props) {
                           style={{ width: "100%" }}
                         />
                       </div>
+
                       <div>
-                        <div className="control-label" style={{ marginBottom: 6 }}>GitHub token (if not set in .env)</div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                          <div className="control-label">PR Description</div>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ fontSize: ".72rem", padding: "2px 8px" }}
+                            onClick={() => setShowPrBodyEditor(!showPrBodyEditor)}
+                          >
+                            {showPrBodyEditor ? "Hide Description Editor" : "Edit PR Description"}
+                          </button>
+                        </div>
+                        {showPrBodyEditor ? (
+                          <textarea
+                            className="repo-url-input"
+                            value={prBody}
+                            onChange={(e) => setPrBody(e.target.value)}
+                            rows={6}
+                            style={{ width: "100%", fontFamily: "monospace", fontSize: ".82rem", resize: "vertical" }}
+                          />
+                        ) : (
+                          <div
+                            onClick={() => setShowPrBodyEditor(true)}
+                            style={{
+                              padding: "10px 14px",
+                              borderRadius: 6,
+                              background: "rgba(255,255,255,0.03)",
+                              border: "1px solid rgba(255,255,255,0.06)",
+                              fontSize: ".8rem",
+                              color: "var(--text3)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            📝 Default summary generated ({changes.length} files). Click to edit PR body.
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="control-label" style={{ marginBottom: 6 }}>
+                          GitHub Token <span style={{ color: "var(--text3)", fontWeight: 400 }}>(optional if GITHUB_TOKEN is in .env)</span>
+                        </div>
                         <input
                           type="password"
                           className="repo-url-input"
-                          placeholder="ghp_... (needs repo write access)"
+                          placeholder="ghp_... (needs repository write permission)"
                           value={ghToken}
                           onChange={(e) => setGhToken(e.target.value)}
                           style={{ width: "100%" }}
@@ -543,25 +747,27 @@ export default function FinalResult({ state, onReset }: Props) {
                     </div>
 
                     {pushResult?.error && (
-                      <div className="repo-error" style={{ marginTop: 12 }}>{pushResult.error}</div>
+                      <div className="repo-error" style={{ marginTop: 14 }}>{pushResult.error}</div>
                     )}
 
-                    <button
-                      className="btn btn-primary"
-                      onClick={handlePush}
-                      disabled={pushing || !prTitle.trim() || (changes.length > 0 && selectedFiles.size === 0)}
-                      style={{ marginTop: 16, fontSize: ".9rem" }}
-                    >
-                      {pushing
-                        ? "Creating PR..."
-                        : changes.length > 0
-                          ? `🚀 Create PR (${selectedFiles.size} file${selectedFiles.size !== 1 ? "s" : ""})`
-                          : "🚀 Create Pull Request"}
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 20 }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={handlePush}
+                        disabled={pushing || !prTitle.trim() || (changes.length > 0 && selectedFiles.size === 0)}
+                        style={{ fontSize: ".92rem", padding: "10px 22px" }}
+                      >
+                        {pushing
+                          ? "⏳ Creating Pull Request..."
+                          : changes.length > 0
+                            ? `🚀 Create PR (${selectedFiles.size} of ${changes.length} files)`
+                            : "🚀 Create Pull Request"}
+                      </button>
 
-                    <p style={{ color: "var(--text3)", fontSize: ".78rem", marginTop: 10, lineHeight: 1.5 }}>
-                      The Think Tank's output will be parsed for <code>=== FILE: path ===</code> blocks and committed to a new branch. A PR will be opened against the default branch.
-                    </p>
+                      <span style={{ color: "var(--text3)", fontSize: ".78rem" }}>
+                        Safe branch creation · Target: <code>main</code>
+                      </span>
+                    </div>
                   </>
                 )}
               </div>

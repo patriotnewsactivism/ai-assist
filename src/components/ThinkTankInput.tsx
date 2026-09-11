@@ -84,6 +84,7 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
   const [repoUrl, setRepoUrl]           = useState("");
   const [repoToken, setRepoToken]       = useState("");
   const [repoFiles, setRepoFiles]       = useState<RepoFileInfo[] | null>(null);
+  const [repoFilter, setRepoFilter]     = useState("");
   const [repoImporting, setRepoImporting] = useState(false);
   const [repoError, setRepoError]       = useState("");
   const [enableSteelman, setSteelman]   = useState(true);
@@ -358,79 +359,119 @@ export default function ThinkTankInput({ serverConfig, onStart }: Props) {
                 </button>
               </div>
             ) : (
-              <div className="repo-input-row">
-                <input
-                  type="text"
-                  className="repo-url-input"
-                  placeholder="https://github.com/owner/repo"
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleImportRepo())}
-                />
-                {!serverConfig?.githubConfigured && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="repo-input-row">
                   <input
-                    type="password"
-                    className="repo-token-input"
-                    placeholder="Token (private repos)"
-                    value={repoToken}
-                    onChange={(e) => setRepoToken(e.target.value)}
+                    type="text"
+                    className="repo-url-input"
+                    placeholder="https://github.com/owner/repo"
+                    value={repoUrl}
+                    onChange={(e) => setRepoUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleImportRepo())}
                   />
+                  {!serverConfig?.githubConfigured && (
+                    <input
+                      type="password"
+                      className="repo-token-input"
+                      placeholder="Token (private repos)"
+                      value={repoToken}
+                      onChange={(e) => setRepoToken(e.target.value)}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-ghost repo-import-btn"
+                    disabled={!repoUrl.trim() || repoImporting}
+                    onClick={handleImportRepo}
+                  >
+                    {repoImporting ? "Importing..." : "Import"}
+                  </button>
+                </div>
+
+                {repoImporting && (
+                  <div className="repo-loading-indicator" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "rgba(99,102,241,0.08)", borderRadius: 6, border: "1px solid rgba(99,102,241,0.2)" }}>
+                    <span className="spinner-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "#6366f1", animation: "pulse 1.2s infinite" }} />
+                    <span style={{ fontSize: ".78rem", color: "var(--text2)" }}>
+                      Downloading repository archive & extracting file tree...
+                    </span>
+                  </div>
                 )}
-                <button
-                  type="button"
-                  className="btn btn-ghost repo-import-btn"
-                  disabled={!repoUrl.trim() || repoImporting}
-                  onClick={handleImportRepo}
-                >
-                  {repoImporting ? "Importing..." : "Import"}
-                </button>
               </div>
             )}
 
             {repoError && <div className="repo-error">{repoError}</div>}
 
             {repoFiles && repoFiles.length > 0 && (
-              <div className="repo-file-list">
-                {repoFiles.length <= 30 ? (
-                  // Small repos: show all file chips
-                  <>
-                    {repoFiles.map((f) => (
-                      <span key={f.path} className="repo-file-chip">{f.path}</span>
-                    ))}
-                  </>
-                ) : (
-                  // Large repos: show directory summary with top-level counts
-                  <>
-                    {(() => {
-                      const dirs = new Map<string, number>();
-                      let rootCount = 0;
-                      for (const f of repoFiles) {
-                        if (f.path.includes("/")) {
-                          const topDir = f.path.split("/")[0]!;
-                          dirs.set(topDir, (dirs.get(topDir) ?? 0) + 1);
-                        } else {
-                          rootCount++;
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* Search filter for imported files */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="text"
+                    className="repo-url-input"
+                    placeholder="Filter imported files (e.g. .ts, src/)..."
+                    value={repoFilter}
+                    onChange={(e) => setRepoFilter(e.target.value)}
+                    style={{ fontSize: ".76rem", padding: "4px 10px", width: "100%", maxWidth: 320 }}
+                  />
+                  {repoFilter && (
+                    <span style={{ fontSize: ".75rem", color: "var(--text3)" }}>
+                      {repoFiles.filter(f => f.path.toLowerCase().includes(repoFilter.toLowerCase().trim())).length} matched
+                    </span>
+                  )}
+                </div>
+
+                <div className="repo-file-list">
+                  {repoFilter.trim() ? (
+                    // Filtered results
+                    <>
+                      {repoFiles
+                        .filter(f => f.path.toLowerCase().includes(repoFilter.toLowerCase().trim()))
+                        .slice(0, 50)
+                        .map((f) => (
+                          <span key={f.path} className="repo-file-chip highlight">{f.path}</span>
+                        ))}
+                    </>
+                  ) : repoFiles.length <= 30 ? (
+                    // Small repos: show all file chips
+                    <>
+                      {repoFiles.map((f) => (
+                        <span key={f.path} className="repo-file-chip">{f.path}</span>
+                      ))}
+                    </>
+                  ) : (
+                    // Large repos: show directory summary with top-level counts
+                    <>
+                      {(() => {
+                        const dirs = new Map<string, number>();
+                        let rootCount = 0;
+                        for (const f of repoFiles) {
+                          if (f.path.includes("/")) {
+                            const topDir = f.path.split("/")[0]!;
+                            dirs.set(topDir, (dirs.get(topDir) ?? 0) + 1);
+                          } else {
+                            rootCount++;
+                          }
                         }
-                      }
-                      const sorted = [...dirs.entries()].sort((a, b) => b[1] - a[1]);
-                      return (
-                        <>
-                          {rootCount > 0 && (
-                            <span className="repo-file-chip" style={{ fontWeight: 600 }}>(root) × {rootCount}</span>
-                          )}
-                          {sorted.slice(0, 15).map(([dir, count]) => (
-                            <span key={dir} className="repo-file-chip">
-                              📁 {dir}/ <span style={{ opacity: 0.6, marginLeft: 4 }}>×{count}</span>
-                            </span>
-                          ))}
-                          {sorted.length > 15 && (
-                            <span className="repo-file-chip" style={{ opacity: .6 }}>+{sorted.length - 15} more dirs</span>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
+                        const sorted = [...dirs.entries()].sort((a, b) => b[1] - a[1]);
+                        return (
+                          <>
+                            {rootCount > 0 && (
+                              <span className="repo-file-chip" style={{ fontWeight: 600 }}>(root) × {rootCount}</span>
+                            )}
+                            {sorted.slice(0, 15).map(([dir, count]) => (
+                              <span key={dir} className="repo-file-chip">
+                                📁 {dir}/ <span style={{ opacity: 0.6, marginLeft: 4 }}>×{count}</span>
+                              </span>
+                            ))}
+                            {sorted.length > 15 && (
+                              <span className="repo-file-chip" style={{ opacity: .6 }}>+{sorted.length - 15} more dirs</span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
