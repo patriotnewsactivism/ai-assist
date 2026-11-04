@@ -427,7 +427,7 @@ export async function runRoundtable(
   return lastSynthesis;
 }
 
-// DEFAULT: Six distinct free OpenRouter reasoning models (Sept 2026, live-tested & confirmed working)
+// DEFAULT: Six distinct free OpenRouter reasoning models (Sept 2026, catalog-current free tier)
 // Each role gets a unique model from the free tier so the debate benefits from diverse reasoning styles.
 // If any model hits rate limits, the fallback chain provides redundancy with other free models.
 export const DEFAULT_AGENT_MODELS: Record<AgentRole, { provider: import("./types.js").Provider; modelId: string }> = {

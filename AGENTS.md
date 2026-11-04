@@ -10,10 +10,12 @@
 - **Start production server**: `npm run start` (executes `start.sh`)  
   Builds frontend then starts Express server serving static files from `/dist`.
 - **Type-check TypeScript**: `npx tsc --noEmit`
+- **Run security tests**: `npm test` (auth + rate limiting, `security/`)
 
 ## Environment Setup
 - Copy `.env.example` to `.env` and fill in required API keys.
 - Server fails to start if no API keys are provided (checked at startup).
+- Required auth config: `THINKTANK_ACCESS_KEY` (+ `THINKTANK_SESSION_SECRET`) and/or `THINKTANK_API_KEYS`. The server refuses to start without them (`THINKTANK_AUTH=disabled` is dev-only).
 - Optional API keys: GEMINI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, GITHUB_TOKEN, TAVILY_API_KEY.
 
 ## Architecture Overview
@@ -28,6 +30,7 @@
   - `DebateResult`: Displays final output with tab for full debate history.
 
 ## Quirks & Conventions
+- All `/api/*` routes sit behind `security/auth.ts` and `security/rateLimit.ts`, mounted BEFORE the 50 MB body parsers in `server.ts`. Keep it that way. New routes under `/api` are authenticated and rate limited by default; the railway healthcheck is `/api/healthz`.
 - The adversarial loop uses stateful Auditor (critiques accumulate across rounds) and stateless Creator (fresh context each round).
 - In CODE_MODE, the synthesizer output is parsed for code blocks and automatically built in a sandbox; build summary is fed to the Judge in subsequent rounds.
 - File uploads and URL fetching are processed into text context for the AI loop.

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
-    "start": "sh start.sh"
+    "start": "sh start.sh",
+    "test": "tsx --test security/__tests__/*.test.ts"
   },
   "type": "module",
   "engines": {

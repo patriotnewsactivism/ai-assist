@@ -39,7 +39,14 @@ DEEPSEEK_API_KEY=your_deepseek_key_here   # only if credits available
 # Optional features
 TAVILY_API_KEY=your_tavily_key_here       # enables live web search
 GITHUB_TOKEN=your_github_token_here       # enables repo import + PR push
+
+# Required — authentication (the server refuses to start without them)
+THINKTANK_ACCESS_KEY=at_least_24_random_chars       # browser login
+THINKTANK_SESSION_SECRET=at_least_32_random_chars   # signs the session cookie
+THINKTANK_API_KEYS=apex:at_least_24_random_chars    # machine callers, `id:key`, comma-separated
 ```
+
+For local development only you can set `THINKTANK_AUTH=disabled` instead (refused when `NODE_ENV=production`).
 
 ### Development
 
@@ -91,6 +98,24 @@ View the final refined output and explore the complete debate history showing ho
 See `CLAUDE.md` for detailed technical architecture.
 
 ## API Endpoints
+
+### Authentication and rate limits
+
+Every `/api/*` route requires authentication, except `GET /api/healthz` and `/api/auth/*`.
+
+- **Machine callers:** `Authorization: Bearer <key>` with a key from `THINKTANK_API_KEYS`.
+- **Browser:** the UI shows a login screen; `POST /api/auth/login {"key": "<THINKTANK_ACCESS_KEY>"}` sets a 12-hour `HttpOnly; SameSite=Strict` session cookie (`Secure` in production). `POST /api/auth/logout` clears it; `GET /api/auth/session` reports state.
+- Unauthenticated requests get `401`. Throttled requests get `429` with `Retry-After`.
+
+| Limit | Default |
+|---|---|
+| Failed logins | 5 per IP per 15 min, then locked out |
+| `POST /api/debate` | 10 per hour per principal; 2 debates running at once, server-wide |
+| Repo import/push, uploads, fetch-url | 30 per 10 min per principal |
+| TTS | 120 per 10 min per principal |
+| All other `/api` | 300 per 10 min per principal |
+
+Limits are in-memory per process (the Railway service runs a single replica) and are tunable via `THINKTANK_RL_*` / `THINKTANK_MAX_CONCURRENT_DEBATES`.
 
 ### POST /api/debate
 Start a new debate session.

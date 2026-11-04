@@ -30,6 +30,8 @@ import {
   extractChanges,
 } from "./engine/index.js";
 import type { ThinkTankConfig, SSEEventPayload, AgentRole, Provider } from "./engine/index.js";
+import { authRouter, loadAuthConfig, requireAuth } from "./security/auth.js";
+import { ConcurrencyGate, SlidingWindowLimiter, clientIp, loadLimits, principalOrIp, rateLimit } from "./security/rateLimit.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,6 +48,45 @@ if (!GEMINI_KEY && !ANTHROPIC_KEY && !DEEPSEEK_KEY && !OPENAI_KEY && !GROQ_KEY) 
 
 const app = express();
 const PORT = process.env["PORT"] || 5000;
+
+// ── Security: auth + rate limiting ──────────────────────────────────────────
+// Everything under /api is authenticated and rate limited BEFORE the 50 MB body parsers
+// below, so unauthenticated or throttled callers never cost us a parse. Static assets stay
+// public (the SPA must load to show its login screen). Fails closed at boot if misconfigured.
+let AUTH: ReturnType<typeof loadAuthConfig>;
+let LIMITS: ReturnType<typeof loadLimits>;
+try {
+  AUTH = loadAuthConfig();
+  LIMITS = loadLimits();
+} catch (err) {
+  console.error(`[Server] FATAL: ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
+}
+if (AUTH.disabled) console.warn("[Server] WARNING: THINKTANK_AUTH=disabled — all /api routes are unauthenticated (dev only)");
+
+// Railway terminates TLS at one proxy hop; without this every client shares the proxy's IP.
+app.set("trust proxy", 1);
+
+const TEN_MIN = 10 * 60_000;
+const preAuthLimiter  = new SlidingWindowLimiter({ windowMs: TEN_MIN, max: LIMITS.preAuthPer10Min });
+const generalLimiter  = new SlidingWindowLimiter({ windowMs: TEN_MIN, max: LIMITS.generalPer10Min });
+const heavyLimiter    = new SlidingWindowLimiter({ windowMs: TEN_MIN, max: LIMITS.heavyPer10Min });
+const ttsLimiter      = new SlidingWindowLimiter({ windowMs: TEN_MIN, max: LIMITS.ttsPer10Min });
+const debateLimiter   = new SlidingWindowLimiter({ windowMs: 60 * 60_000, max: LIMITS.debatePerHour });
+const loginFailures   = new SlidingWindowLimiter({ windowMs: 15 * 60_000, max: LIMITS.loginFailures });
+const debateGate      = new ConcurrencyGate(LIMITS.maxConcurrentDebates);
+
+// Unauthenticated liveness probe (Railway healthcheck). Reveals nothing about configuration.
+app.get("/api/healthz", (_req, res) => { res.json({ ok: true }); });
+
+app.use("/api", rateLimit(preAuthLimiter, (req) => `ip:${clientIp(req)}`));
+app.use("/api/auth", authRouter(AUTH, loginFailures));
+app.use("/api", requireAuth(AUTH));
+app.use("/api", rateLimit(generalLimiter, principalOrIp));
+app.use("/api/repo", rateLimit(heavyLimiter, principalOrIp));
+app.use("/api/documents", rateLimit(heavyLimiter, principalOrIp));
+app.use("/api/tts", rateLimit(ttsLimiter, principalOrIp));
+app.post("/api/debate", rateLimit(debateLimiter, principalOrIp));
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -272,6 +313,13 @@ app.post("/api/debate", (req, res) => {
 
   if (!input?.trim()) return res.status(400).json({ error: "Input is required" });
 
+  // Server-wide cap on simultaneous debates: each one fans out to several paid LLM calls.
+  const releaseSlot = debateGate.tryAcquire();
+  if (!releaseSlot) {
+    res.setHeader("Retry-After", "30");
+    return res.status(429).json({ error: "Too many debates running; try again shortly", retryAfterSec: 30 });
+  }
+
   const sessionId = Date.now().toString();
   const emitter = new EventEmitter();
   emitter.setMaxListeners(20);
@@ -360,6 +408,7 @@ app.post("/api/debate", (req, res) => {
       run.finishedAt = new Date().toISOString();
       saveRun(run);
     } finally {
+      releaseSlot();
       emitter.emit("done");
       setTimeout(() => {
         sessionEmitters.delete(sessionId);
